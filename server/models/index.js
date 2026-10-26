@@ -1,7 +1,7 @@
 const sequelize = require("../config/database");
 
 const User = require("./UserModel")(sequelize);
-const BusModel = require("./BusModel")(sequelize);
+const BusModel = require("./BusInfo")(sequelize);
 const BusCrewHistory = require("./CrewAssignment")(sequelize);
 const Route = require("./RouteModel")(sequelize);
 const RouteStop = require("./RouteStopModel")(sequelize);
