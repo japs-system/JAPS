@@ -1,0 +1,106 @@
+<div class="overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 border-b border-gray-200">
+      <tr>
+        <th
+          class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+        >
+          Trip #
+        </th>
+        <th
+          class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+        >
+          Route
+        </th>
+        <th
+          class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+        >
+          Departure
+        </th>
+        <th
+          class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+        >
+          Tickets
+        </th>
+        <th
+          class="text-right px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+        >
+          Grand Total
+        </th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      @for (trip of trips(); track trip.id) {
+        <tr class="hover:bg-gray-50 cursor-pointer" (click)="toggleTripTickets(trip.id)">
+          <td class="px-5 py-3 font-medium text-gray-800">{{ trip.trip_number }}</td>
+          <td class="px-5 py-3 text-gray-600 text-xs whitespace-nowrap">
+            @if (trip.Route) {
+              {{ trip.Route.origin }} → {{ trip.Route.destination }}
+            }
+          </td>
+          <td class="px-5 py-3 text-gray-600 text-xs whitespace-nowrap">
+            {{ trip.departure_time | date: 'shortTime' }}
+          </td>
+          <td class="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
+            <span class="inline-flex items-center gap-1.5">
+              <i
+                class="pi text-[10px] text-gray-400"
+                [class.pi-chevron-down]="expandedTripId() === trip.id"
+                [class.pi-chevron-right]="expandedTripId() !== trip.id"
+              ></i>
+              {{ trip.ticket_number_start }} – {{ trip.ticket_number_end }}
+              @if (trip.Tickets) {
+                <span class="text-gray-400">({{ trip.Tickets.length }})</span>
+              }
+            </span>
+          </td>
+          <td class="px-5 py-3 text-right font-semibold text-green-600">
+            {{ trip.grand_total | currency: 'PHP' }}
+          </td>
+        </tr>
+        @if (expandedTripId() === trip.id) {
+          <tr>
+            <td colspan="5" class="bg-gray-50 px-5 py-3">
+              @if (!trip.Tickets) {
+                <p class="text-xs text-gray-400 italic">Loading tickets…</p>
+              } @else if (trip.Tickets.length === 0) {
+                <p class="text-xs text-gray-400 italic">No tickets recorded for this trip.</p>
+              } @else {
+                <table class="w-full text-xs whitespace-nowrap">
+                  <thead>
+                    <tr class="text-gray-400">
+                      <th class="text-left font-semibold py-1.5 pr-3">Ticket #</th>
+                      <th class="text-left font-semibold py-1.5 pr-3">Passengers</th>
+                      <th class="text-left font-semibold py-1.5 pr-3">From</th>
+                      <th class="text-left font-semibold py-1.5 pr-3">To</th>
+                      <th class="text-right font-semibold py-1.5 pr-3">Distance</th>
+                      <th class="text-right font-semibold py-1.5 pr-3">Fare</th>
+                      <th class="text-right font-semibold py-1.5">Issued</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200">
+                    @for (ticket of trip.Tickets; track ticket.id) {
+                      <tr class="text-gray-700">
+                        <td class="py-1.5 pr-3 font-medium">{{ ticket.ticket_number }}</td>
+                        <td class="py-1.5 pr-3">{{ passengerSummary(ticket) }}</td>
+                        <td class="py-1.5 pr-3">{{ ticket.boarding_point ?? '—' }}</td>
+                        <td class="py-1.5 pr-3">{{ ticket.dropping_point ?? '—' }}</td>
+                        <td class="py-1.5 pr-3 text-right">{{ ticket.distance_km }} km</td>
+                        <td class="py-1.5 pr-3 text-right font-semibold text-green-600">
+                          {{ ticket.fare | currency: 'PHP' }}
+                        </td>
+                        <td class="py-1.5 text-right text-gray-400">
+                          {{ ticket.issued_at | date: 'shortTime' }}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </td>
+          </tr>
+        }
+      }
+    </tbody>
+  </table>
+</div>

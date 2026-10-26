@@ -1,0 +1,15 @@
+{
+  "name": "japs-ticket-printer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prints a sample JAPS ticket to a BLE thermal printer exactly the way the conductor portal does.",
+  "scripts": {
+    "print": "node print-sample-ticket.js",
+    "preview": "node print-sample-ticket.js --preview sample-ticket.png"
+  },
+  "dependencies": {
+    "@stoprocent/noble": "^2.3.4",
+    "html2canvas-pro": "^2.3.1",
+    "puppeteer-core": "^24.0.0"
+  }
+}

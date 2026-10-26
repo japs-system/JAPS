@@ -1,0 +1,406 @@
+<div class="mb-4 md:mb-6">
+  <h2 class="text-lg md:text-2xl font-bold text-gray-800">Conductor Ticketing Terminal</h2>
+  <p class="text-xs md:text-sm text-gray-500 mt-1">
+    Select an ongoing trip, encode the passengers travelling together on one ticket, and trigger
+    the thermal printer output.
+  </p>
+</div>
+
+<!-- Select Active Trip -->
+<div class="mb-6">
+  <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+    Select Active / Ongoing Trip
+  </label>
+  <select
+    (change)="selectTrip(+$any($event.target).value)"
+    class="w-full sm:w-96 text-sm border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white text-gray-700 cursor-pointer"
+  >
+    <option value="" disabled [selected]="!selectedTripId()">— Select a trip —</option>
+    @for (t of trips(); track t.id) {
+      <option [value]="t.id" [selected]="selectedTripId() === t.id">
+        Trip #{{ t.trip_number }} · {{ t.Route?.origin }} → {{ t.Route?.destination }} · Bus
+        {{ t.BusModel?.bus_number }} ({{ t.status }})
+      </option>
+    }
+  </select>
+</div>
+
+@if (selectedTrip()) {
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Ticket Encoder Form -->
+    <div class="lg:col-span-2 bg-white rounded-2xl p-6 shadow-md border border-gray-100">
+      <div class="flex items-center gap-2 border-b border-gray-100 pb-4 mb-5">
+        <i class="pi pi-ticket text-blue-500 text-xl"></i>
+        <h3 class="font-bold text-gray-800 text-lg">Ticketing</h3>
+      </div>
+
+      <form [formGroup]="ticketForm" (ngSubmit)="printTicketSubmit()" class="space-y-5">
+        <!-- Next ticket number preview -->
+        <div
+          class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3"
+        >
+          <span class="text-xs font-bold text-gray-500 uppercase tracking-wider"
+            >Ticket #</span
+          >
+          <span class="font-black text-gray-800 text-lg">
+            @if (selectedTrip()?.ticket_number_end) {
+              {{ +selectedTrip()!.ticket_number_end! + 1 }}
+            } @else {
+              1
+            }
+          </span>
+        </div>
+
+        <!-- Passengers on this ticket (one ticket can cover a whole group) -->
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5"
+            >Passengers on this Ticket</label
+          >
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5" formGroupName="quantities">
+            @for (cat of CATEGORIES; track cat) {
+              <div
+                class="flex items-center justify-between gap-3 p-3 rounded-xl border-2 transition-all"
+                [class.border-blue-500]="quantity(cat) > 0"
+                [class.bg-blue-50/20]="quantity(cat) > 0"
+                [class.border-gray-200]="quantity(cat) === 0"
+              >
+                <div class="min-w-0">
+                  <span class="block text-xs font-bold text-gray-700">{{
+                    getCategoryLabel(cat)
+                  }}</span>
+                  @if (getDiscountPercent(cat) > 0) {
+                    <span
+                      class="text-[9px] bg-green-100 text-green-800 font-bold px-1.5 py-0.5 rounded-full"
+                      >{{ getDiscountPercent(cat) }}% off</span
+                    >
+                  } @else {
+                    <span
+                      class="text-[9px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded-full"
+                      >Base fare</span
+                    >
+                  }
+                  @if (baseFare() > 0) {
+                    <span class="block text-[10px] text-gray-400 mt-1"
+                      >₱{{ categoryUnitFare(cat) | number: '1.2-2' }} each</span
+                    >
+                  }
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    (click)="changeQuantity(cat, -1)"
+                    [disabled]="quantity(cat) === 0"
+                    class="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                    [attr.aria-label]="'Remove one ' + getCategoryLabel(cat)"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                    [formControlName]="cat"
+                    class="w-12 text-center border border-gray-300 rounded-lg py-1.5 text-sm font-bold outline-none focus:border-blue-500"
+                    [attr.aria-label]="getCategoryLabel(cat) + ' passengers'"
+                  />
+                  <button
+                    type="button"
+                    (click)="changeQuantity(cat, 1)"
+                    class="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
+                    [attr.aria-label]="'Add one ' + getCategoryLabel(cat)"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            }
+          </div> 
+        </div>
+
+        <!-- Boarding Point -->
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"
+            >Boarding Point <span class="text-red-500">*</span></label
+          >
+          <select
+            formControlName="boarding_km"
+            class="w-full px-4 py-3 border border-gray-300 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm font-semibold bg-white"
+          >
+            <option [ngValue]="null" disabled>— Select boarding point —</option>
+            @for (stop of routeStops(); track stop.km_from_origin) {
+              <option [ngValue]="stop.km_from_origin">{{ stop.name }} — {{ stop.km_from_origin }} km</option>
+            }
+          </select>
+          @if (
+            ticketForm.get('boarding_km')?.touched &&
+            ticketForm.get('boarding_km')?.errors?.['required']
+          ) {
+            <p class="text-red-500 text-xs mt-1">Boarding point is required.</p>
+          }
+        </div>
+
+        <!-- Dropping Point -->
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"
+            >Dropping Point <span class="text-red-500">*</span></label
+          >
+          <select
+            formControlName="dropping_km"
+            class="w-full px-4 py-3 border border-gray-300 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm font-semibold bg-white"
+          >
+            <option [ngValue]="null" disabled>— Select dropping point —</option>
+            @for (stop of getDroppingOptions(); track stop.km_from_origin) {
+              <option [ngValue]="stop.km_from_origin">{{ stop.name }} — {{ stop.km_from_origin }} km</option>
+            }
+          </select>
+          @if (
+            ticketForm.get('dropping_km')?.touched &&
+            ticketForm.get('dropping_km')?.errors?.['required']
+          ) {
+            <p class="text-red-500 text-xs mt-1">Dropping point is required.</p>
+          }
+          <p class="text-[10px] text-gray-400 mt-1">
+            Distance ({{ computeDistance() }} km) and fare are calculated automatically from the
+            selected stops.
+          </p>
+        </div>
+
+        <!-- Fare / Ticket Price -->
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"
+            >Calculated Ticket Price</label
+          >
+          <div
+            class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-4"
+          >
+            @if (baseFare() > 0 && fareLines().length > 0) {
+              <div class="space-y-1 mb-3 text-xs text-gray-600">
+                @for (line of fareLines(); track line.category) {
+                  <div class="flex justify-between gap-2">
+                    <span
+                      >{{ getCategoryLabel(line.category) }} × {{ line.quantity }}
+                      <span class="text-gray-400">&#64; ₱{{ line.unit_fare | number: '1.2-2' }}</span></span
+                    >
+                    <span class="font-semibold">₱{{ line.subtotal | number: '1.2-2' }}</span>
+                  </div>
+                }
+              </div>
+            }
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-gray-600"
+                >Total Fare ({{ totalPassengers() }}
+                {{ totalPassengers() === 1 ? 'passenger' : 'passengers' }}):</span
+              >
+              <span class="text-3xl font-black text-green-700"
+                >₱{{ totalFare() | number: '1.2-2' }}</span
+              >
+            </div>
+          </div>
+          <p class="text-[10px] text-gray-400 mt-1">
+            Calculated automatically based on distance, minimum fare, and each category's discount.
+          </p>
+        </div>
+
+        <!-- Submit & Print Button -->
+        <button
+          type="submit"
+          [disabled]="isPrinting() || selectedTrip()?.status === 'completed'"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 md:py-3.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50 text-sm md:text-base"
+        >
+          <i class="pi pi-print text-base md:text-lg"></i>
+          <span class="truncate">{{
+            isPrinting() ? 'Generating...' : 'Print Ticket'
+          }}</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Right Summary Panel -->
+    <div class="space-y-6">
+      <!-- Trip Status Panel -->
+      <div class="bg-[#0F2942] text-white rounded-2xl p-5 shadow-md">
+        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+          Transit Information
+        </h4>
+        <div class="space-y-3.5 text-sm">
+          <div>
+            <span class="text-[10px] text-gray-400 block mb-0.5">Route</span>
+            <span class="font-bold text-base text-white"
+              >{{ selectedTrip()?.Route?.origin }} → {{ selectedTrip()?.Route?.destination }}</span
+            >
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="text-[10px] text-gray-400 block mb-0.5">Bus Number</span>
+              <span class="font-bold text-white">{{ selectedTrip()?.BusModel?.bus_number }}</span>
+            </div>
+          </div>
+          <div class="pt-3 border-t border-white/10 flex items-center justify-between">
+            <div>
+              <span class="text-[10px] text-gray-400 block mb-0.5">Total Revenue</span>
+              <span class="text-xl font-black text-green-400">{{
+                selectedTrip()?.grand_total | currency: 'PHP'
+              }}</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block mb-0.5">Ticket Range</span>
+              <span class="text-xs font-semibold text-blue-300">
+                @if (selectedTrip()?.ticket_number_start) {
+                  #{{ selectedTrip()?.ticket_number_start }} -
+                  {{ selectedTrip()?.ticket_number_end }}
+                } @else {
+                  —
+                }
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Passenger Breakdown Category -->
+      <div class="bg-white rounded-2xl p-5 shadow-md border border-gray-100">
+        <h4 class="font-bold text-gray-800 text-sm mb-3">Passenger Breakdown</h4>
+        <div class="divide-y divide-gray-100">
+          @for (cat of ['regular', 'student', 'senior_citizen', 'pwd', 'discounted']; track cat) {
+            <div class="py-2.5 flex items-center justify-between text-xs">
+              <span class="font-bold text-gray-700 capitalize">{{ getCategoryLabel(cat) }}</span>
+              <div class="flex items-center gap-3">
+                <span class="px-2 py-0.5 bg-gray-100 rounded-full font-bold text-gray-600">
+                  {{ passengerCounts().find((c) => c.category === cat)?.count || 0 }} pax
+                </span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+} @else {
+  <div
+    class="bg-white rounded-2xl p-12 text-center shadow-md max-w-xl mx-auto border border-gray-100 mt-8"
+  >
+    <div
+      class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-500 mb-4"
+    >
+      <i class="pi pi-ticket text-2xl"></i>
+    </div>
+    <h3 class="text-lg font-bold text-gray-800 mb-2">No Active Trip Selected</h3>
+    <p class="text-gray-500 text-sm">
+      Please select one of your ongoing or completed trips above to manage ticketing or view
+      passenger breakdown.
+    </p>
+  </div>
+}
+
+<!-- Thermal print modal -->
+@if (showPrintModal()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" (click)="closePrintModal()"></div>
+
+    <!-- Modal Card (designed to look like a thermal ticket) -->
+    <div
+      class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-fade-in print:shadow-none print:w-full print:max-w-none print:p-0"
+    >
+      <!-- Thermal Header / Tear Line representation -->
+      <div
+        class="bg-[#F8FAFC] border-b border-dashed border-gray-300 py-3 px-5 flex items-center justify-between print:hidden"
+      >
+        <span class="text-xs font-bold text-gray-600 flex items-center gap-1.5">
+          <i class="pi pi-print"></i> Thermal Receipt Preview
+        </span>
+        <button
+          (click)="closePrintModal()"
+          class="text-gray-400 hover:text-gray-600 cursor-pointer"
+        >
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+
+      <!-- Receipt Content — printed as an image at 384px = 384 printer dots (≈8 dots/mm on
+           58mm paper), so sizes here are in printer dots: text-xl ≈ 2.5mm, text-2xl ≈ 3mm.
+           Everything is solid black: the print is thresholded to 1-bit, and grey/light
+           strokes come out thin or disappear. -->
+      <div
+        #receiptContent
+        class="bg-white px-2 py-4 font-mono text-xl font-medium text-black space-y-3 max-h-[70vh] overflow-y-auto print:max-h-none print:overflow-visible"
+      >
+        <!-- Store Header -->
+        <div class="text-center space-y-1">
+          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-14 mx-auto" />
+          <p class="text-lg"> {{ lastPrintedTicket()?.date | date: 'medium' }}</p>
+        </div>
+
+        <div class="border-t-2 border-dashed border-black"></div>
+
+        <!-- Ticket Number and Metadata -->
+        <div class="space-y-1">
+          <div class="flex justify-between gap-2 text-2xl">
+            <span>TICKET NO:</span>
+            <span>#{{ lastPrintedTicket()?.ticketNumber }}</span>
+          </div>
+          <div class="flex justify-between gap-2">
+            <span>BUS NO:</span>
+            <span class="text-right">{{ lastPrintedTicket()?.bus?.bus_number }}</span>
+          </div>
+          <div class="flex justify-between gap-2">
+            <span>PLATE NO:</span>
+            <span class="text-right">{{ lastPrintedTicket()?.bus?.plate_number }}</span>
+          </div>
+          <div class="flex justify-between gap-2">
+            <span>FROM:</span>
+            <span class="text-right">{{ lastPrintedTicket()?.boardingPoint }}</span>
+          </div>
+          <div class="flex justify-between gap-2">
+            <span>TO:</span>
+            <span class="text-right">{{ lastPrintedTicket()?.droppingPoint }}</span>
+          </div>
+        </div>
+
+        <div class="border-t-2 border-dashed border-black"></div>
+
+        <!-- Fare details -->
+        <div class="space-y-1">
+          @for (line of lastPrintedTicket()?.passengers ?? []; track line.category) {
+            <div class="flex justify-between gap-2">
+              <span>{{ getCategoryLabel(line.category) }} ×{{ line.quantity }}</span>
+              <span class="text-right">₱{{ line.subtotal | number: '1.2-2' }}</span>
+            </div>
+          }
+          <div class="flex justify-between gap-2">
+            <span>PASSENGERS:</span>
+            <span class="text-right">{{ lastPrintedTicket()?.passengerCount }}</span>
+          </div>
+          <div class="flex justify-between gap-2 text-2xl mt-2 pt-2 border-t-2 border-black">
+            <span>TOTAL AMOUNT:</span>
+            <span class="text-right">₱{{ lastPrintedTicket()?.fare | number: '1.2-2' }}</span>
+          </div>
+        </div>
+
+        <div class="border-t-2 border-dashed border-black"></div>
+
+        <div class="text-center text-lg">
+          <p>Thank you for riding with us!</p>
+          <p class=" text-sm uppercase mt-1">Please keep this ticket</p>
+        </div>
+
+        <!-- Trailing blank space — gives room to cut the paper without clipping
+             the text above it. -->
+        <div class="h-8"></div>
+      </div>
+
+      <!-- Action Footer -->
+      <div
+        class="bg-gray-50 border-t border-gray-150 py-4 px-6 flex justify-end gap-3 shrink-0 print:hidden"
+      >
+        <button
+          (click)="closePrintModal()"
+          class="px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-150 rounded-xl transition-all cursor-pointer"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  </div>
+}

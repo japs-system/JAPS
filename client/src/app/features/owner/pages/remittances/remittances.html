@@ -1,0 +1,244 @@
+<!-- Page header -->
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h2 class="text-xl font-semibold text-gray-800">Remittances</h2>
+    <p class="text-sm text-gray-400 mt-0.5">Overview of all conductor remittance reports</p>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="bg-white rounded-lg shadow-sm overflow-hidden">
+  <!-- Toolbar -->
+  <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
+    <!-- Search -->
+    <div class="relative w-60">
+      <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+      <input
+        type="text"
+        placeholder="Search conductor, driver, bus…"
+        [value]="search()"
+        (input)="onSearch($event)"
+        class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 placeholder:text-gray-400"
+      />
+    </div>
+    <!-- Status filter -->
+    <select
+      (change)="onStatusFilter($event)"
+      [value]="statusFilter()"
+      class="w-40 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white text-gray-600"
+    >
+      <option value="all">All Status</option>
+      <option value="submitted">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
+    <!-- Date From -->
+    <input
+      type="date"
+      [value]="dateFrom()"
+      (change)="onDateFromChange($event)"
+      class="w-36 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 text-gray-600"
+    />
+    <!-- Date To -->
+    <input
+      type="date"
+      [value]="dateTo()"
+      (change)="onDateToChange($event)"
+      class="w-36 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 text-gray-600"
+    />
+    @if (dateFrom() || dateTo()) {
+      <button
+        (click)="clearDateFilters()"
+        class="text-xs text-gray-500 hover:text-[#1E5AAA] font-medium cursor-pointer"
+      >
+        Clear dates
+      </button>
+    }
+    <!-- Results count -->
+    <span class="text-xs text-gray-400 ml-auto">
+      {{ totalItems() }} result{{ totalItems() !== 1 ? 's' : '' }}
+    </span>
+  </div>
+
+  @if (loading()) {
+    <div class="flex items-center justify-center py-16 text-gray-400">
+      <i class="pi pi-spinner pi-spin text-2xl mr-3"></i> Loading remittances...
+    </div>
+  } @else if (paged().length === 0) {
+    <div class="flex flex-col items-center justify-center py-16 text-gray-400">
+      <i class="pi pi-file-check text-4xl mb-3"></i>
+      <p class="text-sm">No remittances found.</p>
+    </div>
+  } @else {
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm whitespace-nowrap">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th
+              (click)="setSort('date')"
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none"
+            >
+              <span class="flex items-center gap-1">
+                Date <i [class]="'pi ' + sortIcon('date') + ' text-xs'"></i>
+              </span>
+            </th>
+            <th
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            >
+              Conductor
+            </th>
+            <th
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            >
+              Driver
+            </th>
+            <th
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            >
+              Bus
+            </th>
+            <th
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            >
+              Trips
+            </th>
+            <th
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            >
+              Gross Income
+            </th>
+            <th
+              (click)="setSort('total_revenue')"
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none"
+            >
+              <span class="flex items-center gap-1">
+                Total Revenue <i [class]="'pi ' + sortIcon('total_revenue') + ' text-xs'"></i>
+              </span>
+            </th>
+            <th
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            >
+              Cash Received
+            </th>
+            <th
+              (click)="setSort('status')"
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none"
+            >
+              <span class="flex items-center gap-1">
+                Status <i [class]="'pi ' + sortIcon('status') + ' text-xs'"></i>
+              </span>
+            </th>
+            <th
+              (click)="setSort('submitted_at')"
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none"
+            >
+              <span class="flex items-center gap-1">
+                Submitted <i [class]="'pi ' + sortIcon('submitted_at') + ' text-xs'"></i>
+              </span>
+            </th>
+            <th
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            >
+              Audited By
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          @for (remit of paged(); track remit.id) {
+            <tr
+              [routerLink]="['/owner/remittances', remit.id]"
+              class="hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              <td class="px-3 py-3 text-gray-800 font-medium">
+                {{ remit.date | date: 'MMM dd, yyyy' }}
+              </td>
+              <td class="px-3 py-3">
+                <div class="font-medium text-gray-800">
+                  {{ remit.conductor.first_name }} {{ remit.conductor.last_name }}
+                </div>
+                <div class="text-xs text-gray-500">{{ remit.conductor.employee_id }}</div>
+              </td>
+              <td class="px-3 py-3 text-gray-600">
+                {{ remit.driver.first_name }} {{ remit.driver.last_name }}
+              </td>
+              <td class="px-3 py-3">
+                <div class="font-medium text-gray-800">{{ remit.BusModel.bus_number }}</div>
+                <div class="text-xs text-gray-500">{{ remit.BusModel.plate_number }}</div>
+              </td>
+              <td class="px-3 py-3 text-gray-600">{{ remit.no_of_trips }}</td>
+              <td class="px-3 py-3 font-medium text-blue-600">
+                {{ remit.gross_income | currency: 'PHP' }}
+              </td>
+              <td class="px-3 py-3 font-medium text-green-600">
+                {{ totalRevenue(remit) | currency: 'PHP' }}
+              </td>
+              <td class="px-3 py-3">
+                @if (remit.cash_received !== null && remit.cash_received !== undefined) {
+                  <div class="font-medium text-gray-800">
+                    {{ remit.cash_received | currency: 'PHP' }}
+                  </div>
+                  @let diff = cashDifference(remit)!;
+                  @if (diff === 0) {
+                    <div class="text-[11px] font-medium text-green-600">Matches</div>
+                  } @else if (diff < 0) {
+                    <div class="text-[11px] font-medium text-red-600">
+                      Short {{ absValue(diff) | currency: 'PHP' }}
+                    </div>
+                  } @else {
+                    <div class="text-[11px] font-medium text-amber-600">
+                      Over {{ diff | currency: 'PHP' }}
+                    </div>
+                  }
+                } @else {
+                  <span class="text-xs text-gray-400">—</span>
+                }
+              </td>
+              <td class="px-3 py-3">
+                <span
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize"
+                  [class]="getStatusBadge(remit.status)"
+                >
+                  {{
+                    remit.status === 'submitted'
+                      ? remit.resubmitted_at
+                        ? 'Updated'
+                        : 'Pending'
+                      : remit.status
+                  }}
+                </span>
+              </td>
+              <td class="px-3 py-3 text-xs text-gray-500">
+                {{ remit.submitted_at | date: 'short' }}
+              </td>
+              <td class="px-3 py-3">
+                @if (remit.approver) {
+                  <div class="font-medium text-gray-800 text-xs">
+                    {{ remit.approver.first_name }} {{ remit.approver.last_name }}
+                  </div>
+                  <div class="text-[11px] text-gray-400">
+                    {{ remit.approved_at | date: 'short' }}
+                  </div>
+                } @else {
+                  <span class="text-xs text-gray-400">—</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <app-table-pagination
+      [currentPage]="currentPage()"
+      [totalPages]="totalPages()"
+      [totalItems]="totalItems()"
+      [pageSize]="pageSize()"
+      [pageStart]="pageStart()"
+      [pageEnd]="pageEnd()"
+      [pageNumbers]="pageNumbers()"
+      [pageSizes]="PAGE_SIZES"
+      (pageChange)="setPage($event)"
+      (pageSizeChange)="onPageSizeChange($event)"
+    />
+  }
+</div>

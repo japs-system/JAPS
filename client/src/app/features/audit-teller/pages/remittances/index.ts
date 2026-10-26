@@ -1,0 +1,1 @@
+export { RemittancesPage } from './remittances';

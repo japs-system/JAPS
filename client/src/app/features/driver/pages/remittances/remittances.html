@@ -1,0 +1,434 @@
+@if (!selected()) {
+  <!-- Page header (list view only) -->
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div>
+      <h2 class="text-xl font-semibold text-gray-800">My Remittances</h2>
+      <p class="text-sm text-gray-400 mt-0.5">
+        Read-only record of remittances submitted for your trips
+      </p>
+    </div>
+  </div>
+
+  <!-- ═══ LIST ═══ -->
+  <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+    <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
+      <div class="relative w-full sm:w-60">
+        <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+        <input
+          type="text"
+          placeholder="Search bus, conductor…"
+          [value]="search()"
+          (input)="onSearch($event)"
+          class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 placeholder:text-gray-400"
+        />
+      </div>
+      <select
+        (change)="onStatusFilter($event)"
+        [value]="statusFilter()"
+        class="w-full sm:w-40 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
+      >
+        <option value="all">All Status</option>
+        <option value="submitted">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+      </select>
+      <input
+        type="date"
+        [value]="dateFrom()"
+        (change)="onDateFromChange($event)"
+        class="w-full sm:w-36 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] text-gray-600"
+      />
+      <input
+        type="date"
+        [value]="dateTo()"
+        (change)="onDateToChange($event)"
+        class="w-full sm:w-36 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] text-gray-600"
+      />
+      @if (dateFrom() || dateTo()) {
+        <button
+          (click)="clearDateFilters()"
+          class="text-xs text-gray-500 hover:text-[#1E5AAA] font-medium cursor-pointer"
+        >
+          Clear dates
+        </button>
+      }
+      <span class="text-xs text-gray-400 sm:ml-auto"
+        >{{ totalItems() }} result{{ totalItems() !== 1 ? 's' : '' }}</span
+      >
+    </div>
+
+    @if (loading()) {
+      <div class="flex items-center justify-center py-16 text-gray-400">
+        <i class="pi pi-spinner pi-spin text-2xl mr-3"></i> Loading...
+      </div>
+    } @else if (paged().length === 0) {
+      <div class="flex flex-col items-center justify-center py-16 text-gray-400">
+        <i class="pi pi-file-check text-4xl mb-3"></i>
+        <p class="text-sm">No remittances found.</p>
+      </div>
+    } @else {
+      <!-- Mobile card list -->
+      <div class="sm:hidden divide-y divide-gray-100">
+        @for (r of paged(); track r.id) {
+          <div class="px-4 py-4 cursor-pointer active:bg-gray-50" (click)="openDetails(r)">
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <p class="font-bold text-gray-800">{{ r.date | date: 'MMM dd, yyyy' }}</p>
+                <p class="text-xs text-gray-500">
+                  Bus {{ r.BusModel.bus_number }} &bull; {{ r.conductor.first_name }}
+                  {{ r.conductor.last_name }}
+                </p>
+              </div>
+              <span
+                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize shrink-0"
+                [class]="getStatusBadge(r.status)"
+              >
+                {{ r.status === 'submitted' ? 'Pending' : r.status }}
+              </span>
+            </div>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-2">
+              <span
+                >Trips: <strong class="text-gray-800">{{ r.no_of_trips }}</strong></span
+              >
+              <span
+                >Gross Income:
+                <strong class="text-blue-600">{{ r.gross_income | currency: 'PHP' }}</strong></span
+              >
+              <span
+                >Total Revenue:
+                <span class="font-medium text-green-700">{{ revenue(r) | currency: 'PHP' }}</span></span
+              >
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Desktop table -->
+      <div class="hidden sm:block overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th
+                (click)="setSort('date')"
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none"
+              >
+                <span class="flex items-center gap-1"
+                  >Date <i [class]="'pi ' + sortIcon('date') + ' text-xs'"></i
+                ></span>
+              </th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Bus
+              </th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Conductor
+              </th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Trips
+              </th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Gross Income
+              </th>
+              <th
+                (click)="setSort('total_revenue')"
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none"
+              >
+                <span class="flex items-center gap-1"
+                  >Total Revenue
+                  <i [class]="'pi ' + sortIcon('total_revenue') + ' text-xs'"></i
+                ></span>
+              </th>
+              <th
+                (click)="setSort('status')"
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none"
+              >
+                <span class="flex items-center gap-1"
+                  >Status <i [class]="'pi ' + sortIcon('status') + ' text-xs'"></i
+                ></span>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            @for (r of paged(); track r.id) {
+              <tr
+                  (click)="openDetails(r)"
+                  (keydown.enter)="openDetails(r)"
+                  tabindex="0"
+                  class="hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:bg-gray-50"
+                >
+                <td class="px-5 py-3 font-medium text-gray-800">
+                  {{ r.date | date: 'MMM dd, yyyy' }}
+                </td>
+                <td class="px-5 py-3">
+                  <div class="font-medium text-gray-800">{{ r.BusModel.bus_number }}</div>
+                  <div class="text-xs text-gray-500">{{ r.BusModel.plate_number }}</div>
+                </td>
+                <td class="px-5 py-3 text-gray-600">
+                  {{ r.conductor.first_name }} {{ r.conductor.last_name }}
+                </td>
+                <td class="px-5 py-3 text-gray-600">{{ r.no_of_trips }}</td>
+                <td class="px-5 py-3 font-medium text-blue-600">
+                  {{ r.gross_income | currency: 'PHP' }}
+                </td>
+                <td class="px-5 py-3 font-medium text-green-700">
+                  {{ revenue(r) | currency: 'PHP' }}
+                </td>
+                <td class="px-5 py-3">
+                  <span
+                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize"
+                    [class]="getStatusBadge(r.status)"
+                  >
+                    {{ r.status === 'submitted' ? 'Pending' : r.status }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <app-table-pagination
+        [currentPage]="currentPage()"
+        [totalPages]="totalPages()"
+        [totalItems]="totalItems()"
+        [pageSize]="pageSize()"
+        [pageStart]="pageStart()"
+        [pageEnd]="pageEnd()"
+        [pageNumbers]="pageNumbers()"
+        [pageSizes]="PAGE_SIZES"
+        (pageChange)="setPage($event)"
+        (pageSizeChange)="onPageSizeChange($event)"
+      />
+    }
+  </div>
+}
+
+<!-- Details Panel -->
+@if (selected()) {
+  <div>
+    <!-- Back header -->
+    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <button
+          (click)="selected.set(null)"
+          class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors cursor-pointer"
+        >
+          <i class="pi pi-arrow-left text-sm"></i>
+        </button>
+        <div>
+          <h2 class="text-xl font-semibold text-gray-800">
+            Remittance Report
+            <span class="text-gray-400 font-normal text-base ml-1">#{{ selected()!.id }}</span>
+          </h2>
+          <p class="text-sm text-gray-400 mt-0.5">{{ selected()!.date | date: 'MMMM dd, yyyy' }}</p>
+        </div>
+      </div>
+      <span
+        class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold capitalize"
+        [class]="getStatusBadge(selected()!.status)"
+      >
+        {{ selected()!.status === 'submitted' ? 'Pending Review' : selected()!.status }}
+      </span>
+    </div>
+
+    @if (selected()!.teller_remarks) {
+      <div
+        class="flex items-start gap-2 bg-blue-50 border border-blue-200 text-blue-700 text-sm px-4 py-3 rounded-lg mb-6"
+      >
+        <i class="pi pi-comment mt-0.5 shrink-0"></i>
+        <div>
+          <span class="font-semibold">Teller Remarks:</span> {{ selected()!.teller_remarks }}
+        </div>
+      </div>
+    }
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <!-- LEFT -->
+      <div class="xl:col-span-2 space-y-6">
+        <!-- Personnel & Bus -->
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 class="text-sm font-semibold text-gray-700 mb-4">Personnel & Bus</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p class="text-xs text-gray-400 mb-0.5">Conductor</p>
+              <p class="font-semibold text-gray-800">
+                {{ selected()!.conductor.first_name }} {{ selected()!.conductor.last_name }}
+              </p>
+              <p class="text-xs text-gray-500">{{ selected()!.conductor.employee_id }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-400 mb-0.5">Driver</p>
+              <p class="font-semibold text-gray-800">
+                {{ selected()!.driver.first_name }} {{ selected()!.driver.last_name }}
+              </p>
+              <p class="text-xs text-gray-500">{{ selected()!.driver.employee_id }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-400 mb-0.5">Bus</p>
+              <p class="font-semibold text-gray-800">Bus {{ selected()!.BusModel.bus_number }}</p>
+              <p class="text-xs text-gray-500">{{ selected()!.BusModel.plate_number }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Trips -->
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-gray-700">
+              Trips ({{ selected()!.Trips.length }})
+            </h3>
+            <span class="text-xs text-gray-400">{{ selected()!.no_of_trips }} total trips</span>
+          </div>
+          <div class="overflow-x-auto">
+            <app-remittance-trips-table [trips]="selected()!.Trips" />
+          </div>
+        </div>
+
+        <!-- Expenses -->
+        @if (selected()!.RemittanceExpenses.length > 0) {
+          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700">Trip Expenses</h3>
+            </div>
+            <div class="divide-y divide-gray-100">
+              @for (exp of selected()!.RemittanceExpenses; track exp.id) {
+                <div class="flex justify-between px-5 py-3 text-sm">
+                  <span class="text-gray-600">{{ formatExpenseType(exp.expense_type) }}</span>
+                  <span class="font-semibold text-red-600">{{ exp.amount | currency: 'PHP' }}</span>
+                </div>
+              }
+            </div>
+            <div
+              class="flex justify-between px-5 py-3 bg-red-50 border-t border-red-100 text-sm font-bold text-red-700"
+            >
+              <span>Total Expenses</span>
+              <span>{{ selected()!.total_expenses | currency: 'PHP' }}</span>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- RIGHT: Financial Summary + Metadata -->
+      <div class="space-y-6">
+        <div class="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 class="text-sm font-semibold text-gray-700 mb-4 pb-3 border-b border-gray-100">
+            Financial Summary
+          </h3>
+          <div class="space-y-2.5 text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-500">Gross Income</span>
+              <span class="font-semibold text-green-600">{{
+                selected()!.gross_income | currency: 'PHP'
+              }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Total Expenses</span>
+              <span class="font-semibold text-red-600"
+                >-{{ selected()!.total_expenses | currency: 'PHP' }}</span
+              >
+            </div>
+            <div class="flex justify-between border-t border-gray-100 pt-2.5 font-semibold">
+              <span class="text-gray-800">Net Gross</span>
+              <span class="text-gray-900">{{ selected()!.net_gross | currency: 'PHP' }}</span>
+            </div>
+
+            <div class="flex justify-between font-semibold">
+              <span class="text-amber-600">Total Less</span>
+              <span class="text-amber-600">-{{ selected()!.total_less | currency: 'PHP' }}</span>
+            </div>
+            <div class="ml-1 pl-3 border-l-2 border-amber-200 space-y-1.5 text-xs">
+              <div class="flex justify-between">
+                <span class="text-gray-400">Driver Commission</span>
+                <span class="text-amber-600"
+                  >-{{ selected()!.driver_commission | currency: 'PHP' : 'symbol' : '1.0-0' }}.00</span
+                >
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Conductor Commission</span>
+                <span class="text-amber-600"
+                  >-{{ selected()!.conductor_commission | currency: 'PHP' : 'symbol' : '1.0-0' }}.00</span
+                >
+              </div>
+              @if (+selected()!.bonus_allowance > 0) {
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Bonus / Allowance</span>
+                  <span class="text-amber-600"
+                    >-{{ selected()!.bonus_allowance | currency: 'PHP' }}</span
+                  >
+                </div>
+              }
+              @if (+selected()!.other_deductions > 0) {
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Other Deductions</span>
+                  <span class="text-amber-600"
+                    >-{{ selected()!.other_deductions | currency: 'PHP' }}</span
+                  >
+                </div>
+              }
+              <div class="flex justify-between">
+                <span class="text-gray-400">Cash Deposit</span>
+                <span class="text-amber-600"
+                  >-{{ selected()!.cash_deposit | currency: 'PHP' }}</span
+                >
+              </div>
+            </div>
+
+            <div
+              class="flex justify-between bg-blue-50 border border-dashed border-blue-200 rounded-lg p-3 font-bold text-[#1E5AAA]"
+            >
+              <span>Net Collection</span>
+              <span>{{ selected()!.net_collection | currency: 'PHP' }}</span>
+            </div>
+            <div
+              class="flex items-center justify-between bg-green-50 border-2 border-green-500 rounded-xl px-4 py-4 text-green-700"
+            >
+              <span class="font-bold">Total Revenue</span>
+              <span class="text-2xl font-bold">{{ revenue(selected()!) | currency: 'PHP' }}</span>
+            </div>
+
+            @if (
+              +selected()!.driver_officer_share > 0 || +selected()!.conductor_officer_share > 0
+            ) {
+              <div class="pt-1 space-y-1 text-xs">
+                <p class="text-gray-400 font-medium">Officer Shares</p>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Driver Share</span>
+                  <span class="text-gray-700">{{
+                    selected()!.driver_officer_share | currency: 'PHP'
+                  }}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Conductor Share</span>
+                  <span class="text-gray-700">{{
+                    selected()!.conductor_officer_share | currency: 'PHP'
+                  }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Metadata -->
+        <div class="bg-white rounded-xl border border-gray-200 p-5 text-xs text-gray-500 space-y-2">
+          <div class="flex justify-between">
+            <span>Submitted</span>
+            <span class="text-gray-700">{{ selected()!.submitted_at | date: 'medium' }}</span>
+          </div>
+          @if (selected()!.approved_at) {
+            <div class="flex justify-between">
+              <span>{{ selected()!.status === 'approved' ? 'Approved' : 'Reviewed' }}</span>
+              <span class="text-gray-700">{{ selected()!.approved_at | date: 'medium' }}</span>
+            </div>
+          }
+          @if (selected()!.approver) {
+            <div class="flex justify-between">
+              <span>Reviewed by</span>
+              <span class="text-gray-700"
+                >{{ selected()!.approver!.first_name }} {{ selected()!.approver!.last_name }}</span
+              >
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+}

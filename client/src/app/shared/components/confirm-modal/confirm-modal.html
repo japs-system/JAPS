@@ -1,0 +1,39 @@
+@if (open()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cancel.emit()"></div>
+    <div
+      class="alert-modal-card relative bg-white rounded-lg shadow-2xl w-full max-w-sm p-8 text-center"
+    >
+      <div
+        class="inline-flex items-center justify-center w-14 h-14 rounded-full mb-4"
+        [class]="variant() === 'danger' ? 'bg-red-100' : 'bg-blue-100'"
+      >
+        <i
+          class="pi text-2xl"
+          [class]="(variant() === 'danger' ? 'text-red-500 ' : 'text-[#1E5AAA] ') + icon()"
+        ></i>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ title() }}</h3>
+      <p class="text-gray-500 text-sm mb-6">{{ message() }}</p>
+      <div class="flex gap-3">
+        <button
+          (click)="cancel.emit()"
+          class="flex-1 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+        >
+          {{ cancelText() }}
+        </button>
+        <button
+          (click)="confirm.emit()"
+          class="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-colors cursor-pointer"
+          [class]="
+            variant() === 'danger'
+              ? 'bg-red-500 hover:bg-red-600'
+              : 'bg-[#1E5AAA] hover:bg-[#174d93]'
+          "
+        >
+          {{ confirmText() }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

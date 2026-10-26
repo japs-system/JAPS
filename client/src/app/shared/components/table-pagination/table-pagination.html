@@ -1,0 +1,57 @@
+<div
+  class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 bg-gray-50 text-sm"
+>
+  <!-- Showing X–Y of Z -->
+  <span class="text-gray-500 text-xs">
+    Showing {{ pageStart() }}–{{ pageEnd() }} of {{ totalItems() }}
+  </span>
+
+  <!-- Page buttons -->
+  <div class="flex items-center gap-1">
+    <button
+      (click)="setPage(currentPage() - 1)"
+      [disabled]="currentPage() === 1"
+      class="p-1.5 rounded-lg text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+    >
+      <i class="pi pi-chevron-left text-xs"></i>
+    </button>
+
+    @for (p of pageNumbers(); track $index) {
+      @if (p === '...') {
+        <span class="px-2 text-gray-400">…</span>
+      } @else {
+        <button
+          (click)="setPage(p)"
+          class="w-8 h-8 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+          [class.bg-\[\#1E5AAA\]]="currentPage() === p"
+          [class.text-white]="currentPage() === p"
+          [class.hover\:bg-blue-50]="currentPage() !== p"
+          [class.text-gray-600]="currentPage() !== p"
+        >
+          {{ p }}
+        </button>
+      }
+    }
+
+    <button
+      (click)="setPage(currentPage() + 1)"
+      [disabled]="currentPage() === totalPages()"
+      class="p-1.5 rounded-lg text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+    >
+      <i class="pi pi-chevron-right text-xs"></i>
+    </button>
+  </div>
+
+  <!-- Page size -->
+  <div class="flex items-center gap-2 text-xs text-gray-500">
+    Rows per page:
+    <select
+      (change)="onPageSize($event)"
+      class="border border-gray-300 rounded-lg px-2 py-1 outline-none focus:border-[#1E5AAA] bg-white"
+    >
+      @for (s of pageSizes(); track s) {
+        <option [value]="s" [selected]="pageSize() === s">{{ s }}</option>
+      }
+    </select>
+  </div>
+</div>

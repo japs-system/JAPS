@@ -1,0 +1,664 @@
+<!-- Header -->
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h2 class="text-xl font-semibold text-gray-800">Dashboard</h2>
+    <p class="text-sm text-gray-400 mt-0.5">
+      Operations overview, analytics & predictive forecasting
+    </p>
+  </div>
+  <span
+    class="text-xs text-gray-400 bg-gray-100 px-3 py-1.5 rounded-full flex items-center gap-1.5"
+  >
+    <i class="pi pi-info-circle"></i> Forecast: linear regression + seasonal decomposition
+  </span>
+</div>
+
+<!-- Date range filter -->
+<div class="flex flex-wrap items-center gap-2 mb-6 bg-white rounded-xl border border-gray-200 p-3">
+  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">Range</span>
+  @for (preset of RANGE_PRESETS; track preset.value) {
+    <button
+      (click)="setRangePreset(preset.value)"
+      class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+      [class]="
+        rangePreset() === preset.value
+          ? 'bg-[#1E5AAA] text-white'
+          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+      "
+    >
+      {{ preset.label }}
+    </button>
+  }
+  @if (rangePreset() === 'custom') {
+    <div class="flex items-center gap-2 ml-1">
+      <input
+        type="date"
+        [value]="customFrom()"
+        (input)="onCustomFromInput($event)"
+        class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-[#1E5AAA]"
+      />
+      <span class="text-gray-400 text-xs">to</span>
+      <input
+        type="date"
+        [value]="customTo()"
+        (input)="onCustomToInput($event)"
+        class="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-[#1E5AAA]"
+      />
+      <button
+        (click)="applyCustomRange()"
+        [disabled]="!customFrom() || !customTo()"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1E5AAA] text-white hover:bg-[#174d93] transition-colors cursor-pointer disabled:opacity-50"
+      >
+        Apply
+      </button>
+    </div>
+  }
+  @if (dash(); as d) {
+    <span class="text-xs text-gray-400 ml-auto">{{ d.range.from }} – {{ d.range.to }}</span>
+  }
+</div>
+
+@if (loading()) {
+  <div class="flex items-center justify-center py-24 text-gray-400">
+    <i class="pi pi-spinner pi-spin text-2xl mr-3"></i> Loading dashboard…
+  </div>
+} @else if (!dash()) {
+  <div class="flex flex-col items-center justify-center py-24 text-gray-400">
+    <i class="pi pi-exclamation-circle text-4xl mb-3"></i>
+    <p class="text-sm">Failed to load dashboard data.</p>
+  </div>
+} @else {
+  <div class="flex flex-col xl:flex-row gap-6 items-start">
+  <div class="flex-1 min-w-0 w-full">
+  <!-- ── KPI Cards (actual + tomorrow forecast side by side) ─────────── -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <!-- Total revenue in selected range -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+        Total Revenue (Selected Range)
+      </p>
+      <p class="text-2xl font-black text-[#1E5AAA]">
+        {{ dash()!.kpi.total_revenue_in_range | currency: 'PHP' : 'symbol' : '1.0-0' }}
+      </p>
+
+      @if (fore()?.kpi_forecast?.predicted_revenue_tomorrow != null) {
+        <p class="text-xs text-gray-400 mt-1 flex items-center gap-1">
+          Tomorrow:
+          <span
+            class="font-semibold"
+            [class]="growthClass(fore()!.kpi_forecast.revenue_growth_pct_tomorrow)"
+          >
+            {{
+              fore()!.kpi_forecast.predicted_revenue_tomorrow | currency: 'PHP' : 'symbol' : '1.0-0'
+            }}
+            @if (fore()!.kpi_forecast.revenue_growth_pct_tomorrow) {
+              ({{ growthPrefix(fore()!.kpi_forecast.revenue_growth_pct_tomorrow)
+              }}{{ fore()!.kpi_forecast.revenue_growth_pct_tomorrow }}%)
+            }
+          </span>
+        </p>
+      }
+    </div>
+
+    <!-- Passengers in selected range -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+        Passengers (Selected Range)
+      </p>
+      <p class="text-2xl font-black text-gray-800">
+        {{ dash()!.kpi.passenger_count_in_range | number }}
+      </p>
+      @if (fore()?.kpi_forecast?.predicted_passengers_tomorrow != null) {
+        <p class="text-xs text-gray-400 mt-1 flex items-center gap-1">
+          Tomorrow:
+          <span
+            class="font-semibold"
+            [class]="growthClass(fore()!.kpi_forecast.passenger_growth_pct_tomorrow)"
+          >
+            {{ fore()!.kpi_forecast.predicted_passengers_tomorrow | number }}
+            @if (fore()!.kpi_forecast.passenger_growth_pct_tomorrow) {
+              ({{ growthPrefix(fore()!.kpi_forecast.passenger_growth_pct_tomorrow)
+              }}{{ fore()!.kpi_forecast.passenger_growth_pct_tomorrow }}%)
+            }
+          </span>
+        </p>
+      } @else if (dash()!.kpi.passenger_growth_pct !== null) {
+        <p
+          class="text-xs mt-1"
+          [class.text-green-600]="+dash()!.kpi.passenger_growth_pct! >= 0"
+          [class.text-red-500]="+dash()!.kpi.passenger_growth_pct! < 0"
+        >
+          {{ +dash()!.kpi.passenger_growth_pct! >= 0 ? '+' : ''
+          }}{{ dash()!.kpi.passenger_growth_pct }}% vs last month
+        </p>
+      }
+    </div>
+
+    <!-- Bus utilisation today + tomorrow forecast -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+        Bus Utilisation
+      </p>
+      <p class="text-2xl font-black text-gray-800">{{ dash()!.kpi.bus_utilisation_rate }}%</p>
+      <p class="text-xs text-gray-400 mt-0.5">
+        {{ dash()!.kpi.buses_in_use_today }} / {{ dash()!.kpi.total_buses }} active today
+      </p>
+      @if (fore()?.kpi_forecast?.predicted_bus_utilisation_tomorrow != null) {
+        <div class="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            class="h-full rounded-full"
+            [class.bg-green-500]="fore()!.kpi_forecast.predicted_bus_utilisation_tomorrow >= 70"
+            [class.bg-amber-400]="
+              fore()!.kpi_forecast.predicted_bus_utilisation_tomorrow >= 40 &&
+              fore()!.kpi_forecast.predicted_bus_utilisation_tomorrow < 70
+            "
+            [class.bg-red-400]="fore()!.kpi_forecast.predicted_bus_utilisation_tomorrow < 40"
+            [style.width.%]="fore()!.kpi_forecast.predicted_bus_utilisation_tomorrow"
+          ></div>
+        </div>
+        <p class="text-xs text-gray-400 mt-0.5">
+          Tomorrow: {{ fore()!.kpi_forecast.predicted_bus_utilisation_tomorrow }}%
+        </p>
+      }
+    </div>
+
+    <!-- Remittances -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Remittances</p>
+      <p class="text-2xl font-black text-gray-800">{{ dash()!.kpi.remittance_total | number }}</p>
+      <p class="text-xs text-gray-400 mt-1">
+        Approved revenue:
+        <span class="font-semibold text-green-600">{{
+          dash()!.kpi.remittance_revenue_in_range | currency: 'PHP' : 'symbol' : '1.0-0'
+        }}</span>
+      </p>
+      <p class="text-xs text-gray-400 mt-0.5">
+        Cash received:
+        @if (dash()!.kpi.remittance_cash_variance_in_range === 0) {
+          <span class="font-semibold text-green-600">Matches</span>
+        } @else if (dash()!.kpi.remittance_cash_variance_in_range < 0) {
+          <span class="font-semibold text-red-500"
+            >Short
+            {{
+              -dash()!.kpi.remittance_cash_variance_in_range | currency: 'PHP' : 'symbol' : '1.0-0'
+            }}</span
+          >
+        } @else {
+          <span class="font-semibold text-amber-500"
+            >Over
+            {{
+              dash()!.kpi.remittance_cash_variance_in_range | currency: 'PHP' : 'symbol' : '1.0-0'
+            }}</span
+          >
+        }
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Passenger Demand + Revenue: actual + forecast in one chart ─────── -->
+  <div class="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <h3 class="text-sm font-semibold text-gray-700">
+        Passenger Demand & Total Revenue — Last 7 Days & Next 7 Day Forecast
+      </h3>
+      <div class="flex flex-wrap gap-4 text-xs text-gray-500">
+        <span class="flex items-center gap-1.5"
+          ><span class="w-5 h-0.5 bg-[#1E5AAA] inline-block rounded"></span>Passengers</span
+        >
+        <span class="flex items-center gap-1.5"
+          ><span class="w-5 h-0.5 bg-amber-400 inline-block rounded"></span>Passenger forecast</span
+        >
+        <span class="flex items-center gap-1.5"
+          ><span class="w-5 h-0.5 bg-emerald-500 inline-block rounded"></span>Total Revenue</span
+        >
+      </div>
+    </div>
+    @if (fore() && allDemandValues().length) {
+      <div class="flex justify-between text-[10px] text-gray-400 mb-1">
+        <span>Passengers (peak {{ maxPassengers() | number: '1.0-0' }})</span>
+        <span>Revenue (peak {{ maxRevenue() | currency: 'PHP' : 'symbol' : '1.0-0' }})</span>
+      </div>
+      <div class="relative h-40" (mouseleave)="hoverIndex.set(null)">
+        <svg
+          viewBox="0 0 500 120"
+          class="absolute inset-0 w-full h-full"
+          preserveAspectRatio="none"
+        >
+          <line
+            x1="0"
+            y1="116"
+            x2="500"
+            y2="116"
+            stroke="#e5e7eb"
+            stroke-width="1"
+            vector-effect="non-scaling-stroke"
+          />
+          @if (splitIndex() > 0 && splitIndex() < allDemandValues().length) {
+            <line
+              [attr.x1]="splitX()"
+              y1="0"
+              [attr.x2]="splitX()"
+              y2="116"
+              stroke="#e5e7eb"
+              stroke-width="1"
+              stroke-dasharray="4,3"
+              vector-effect="non-scaling-stroke"
+            />
+          }
+          <!-- Revenue (right scale) -->
+          <polyline
+            [attr.points]="revenueActualPolyline()"
+            fill="none"
+            stroke="#10b981"
+            stroke-width="2"
+            stroke-linejoin="round"
+            vector-effect="non-scaling-stroke"
+          />
+          @if (revenueForecastPolyline()) {
+            <polyline
+              [attr.points]="revenueForecastPolyline()"
+              fill="none"
+              stroke="#10b981"
+              stroke-width="2"
+              stroke-dasharray="5,3"
+              stroke-linejoin="round"
+              vector-effect="non-scaling-stroke"
+            />
+          }
+          <!-- Passengers (left scale) -->
+          <polyline
+            [attr.points]="actualPolyline()"
+            fill="none"
+            stroke="#1E5AAA"
+            stroke-width="2"
+            stroke-linejoin="round"
+            vector-effect="non-scaling-stroke"
+          />
+          @if (forecastPolyline()) {
+            <polyline
+              [attr.points]="forecastPolyline()"
+              fill="none"
+              stroke="#f59e0b"
+              stroke-width="2"
+              stroke-dasharray="5,3"
+              stroke-linejoin="round"
+              vector-effect="non-scaling-stroke"
+            />
+          }
+        </svg>
+
+        @if (splitIndex() > 0 && splitIndex() < allDemandValues().length) {
+          <span
+            class="absolute top-0 pl-1 text-[10px] text-gray-400 pointer-events-none"
+            [style.left.%]="splitX() / 5"
+            >Today</span
+          >
+        }
+
+        @if (hovered(); as h) {
+          <div
+            class="absolute top-0 bottom-0 w-px bg-gray-300 pointer-events-none"
+            [style.left.%]="h.xPct"
+          ></div>
+          <span
+            class="absolute w-2.5 h-2.5 rounded-full ring-2 ring-white -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+            [class]="h.type === 'forecast' ? 'bg-amber-400' : 'bg-[#1E5AAA]'"
+            [style.left.%]="h.xPct"
+            [style.top.%]="h.yPPct"
+          ></span>
+          @if (h.yRPct !== null) {
+            <span
+              class="absolute w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+              [style.left.%]="h.xPct"
+              [style.top.%]="h.yRPct"
+            ></span>
+          }
+          <div
+            class="absolute top-0 z-10 -translate-x-1/2 pointer-events-none bg-gray-900 text-white rounded-lg px-3 py-2 text-xs shadow-lg whitespace-nowrap"
+            [style.left.%]="tooltipLeft(h.xPct)"
+          >
+            <p class="font-semibold mb-1">
+              {{ h.label }}
+              <span class="font-normal text-gray-300"
+                >· {{ h.type === 'forecast' ? 'Forecast' : 'Actual' }}</span
+              >
+            </p>
+            <p class="flex items-center gap-1.5">
+              <span
+                class="w-2 h-2 rounded-full"
+                [class]="h.type === 'forecast' ? 'bg-amber-400' : 'bg-[#1E5AAA]'"
+              ></span>
+              {{ h.passengers | number: '1.0-0' }} passengers
+            </p>
+            @if (h.revenue !== null) {
+              <p class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                {{ h.revenue | currency: 'PHP' : 'symbol' : '1.0-0' }} total revenue
+              </p>
+            }
+          </div>
+        }
+
+        <!-- Hover zones: one per day -->
+        <div class="absolute inset-0 flex">
+          @for (p of demandPoints(); track p.date; let i = $index) {
+            <div class="flex-1 cursor-crosshair" (mouseenter)="hoverIndex.set(i)"></div>
+          }
+        </div>
+      </div>
+      <div class="flex text-[10px] text-gray-400 mt-1">
+        @for (label of demandLabels(); track $index) {
+          <span
+            class="flex-1 text-center"
+            [class.font-bold]="$index === splitIndex() - 1"
+            [class.text-gray-600]="$index === splitIndex() - 1"
+            >{{ label }}</span
+          >
+        }
+      </div>
+    } @else if (dailyPassengerBars().length) {
+      <!-- Fallback bar chart if forecast unavailable -->
+      <div class="flex items-end gap-2 h-36">
+        @for (bar of dailyPassengerBars(); track bar.label) {
+          <div class="flex-1 flex flex-col items-center gap-1">
+            <span class="text-[9px] text-gray-400">{{ bar.value || '' }}</span>
+            <div class="w-full h-28 flex items-end">
+              <div
+                class="w-full rounded-t-md bg-[#1E5AAA] transition-all"
+                [style.height.%]="
+                  maxDailyPassengers() > 0 ? (bar.value / maxDailyPassengers()) * 100 : 2
+                "
+                style="min-height: 3px"
+              ></div>
+            </div>
+            <span class="text-[10px] text-gray-500 font-medium">{{ bar.label }}</span>
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="flex items-center justify-center h-36 text-gray-300 text-sm">No data yet</div>
+    }
+  </div>
+
+  <!-- ── Route Profitability + Peak Hours ───────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Route Profitability -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <h3 class="text-sm font-semibold text-gray-700 mb-4">Route Profitability</h3>
+      @if (routeBars().length) {
+        <div class="space-y-3">
+          @for (r of routeBars(); track r.label) {
+            <div>
+              <div class="flex justify-between text-xs text-gray-500 mb-1">
+                <span class="truncate max-w-[60%]">{{ r.label }}</span>
+                <span class="font-semibold text-gray-700">{{
+                  r.revenue | currency: 'PHP' : 'symbol' : '1.0-0'
+                }}</span>
+              </div>
+              <div class="h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  class="h-full bg-[#1E5AAA] rounded-full transition-all"
+                  [style.width.%]="
+                    maxRouteRevenue() > 0 ? (r.revenue / maxRouteRevenue()) * 100 : 0
+                  "
+                ></div>
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="flex items-center justify-center h-32 text-gray-300 text-sm">
+          No completed trips yet
+        </div>
+      }
+    </div>
+
+    <!-- Peak Hours — single source of truth: forecast table (more actionable than area chart) -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <h3 class="text-sm font-semibold text-gray-700 mb-1">Peak Hours</h3>
+      <p class="text-xs text-gray-400 mb-4">30-day average ticket volume by hour</p>
+      @if (fore() && fore()!.peak_hours_forecast.length) {
+        <div class="space-y-3">
+          @for (ph of fore()!.peak_hours_forecast; track ph.hour; let i = $index) {
+            <div
+              class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
+            >
+              <span class="text-sm text-gray-700 font-medium">{{ peakLabel(ph.hour) }}</span>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-gray-400"
+                  >~{{ ph.avg_tickets | number: '1.0-0' }} passengers/hr avg</span
+                >
+                <span class="text-sm" [class]="peakLevel(i).cls">{{ peakLevel(i).label }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      } @else if (peakHourValues().some((v) => v > 0)) {
+        <!-- Fallback area chart if forecast unavailable -->
+        <svg viewBox="0 0 400 100" class="w-full h-28" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="peakGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25" />
+              <stop offset="100%" stop-color="#3b82f6" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <path [attr.d]="areaPath(peakHourValues(), 400, 90)" fill="url(#peakGrad)" />
+          <polyline
+            [attr.points]="polyline(peakHourValues(), 400, 90)"
+            fill="none"
+            stroke="#3b82f6"
+            stroke-width="2"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+          @for (hour of peakHourLabels; track hour) {
+            <span>{{ peakLabel(hour) }}</span>
+          }
+        </div>
+      } @else {
+        <div class="flex items-center justify-center h-32 text-gray-300 text-sm">
+          No ticket data yet
+        </div>
+      }
+    </div>
+
+  </div>
+
+  <!-- ── Remittance Status + Daily Revenue ───────────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div
+      class="bg-white rounded-xl border border-gray-200 p-5 flex flex-col items-center justify-center"
+    >
+      <h3 class="text-sm font-semibold text-gray-700 mb-4 self-start">Remittance Status</h3>
+      <div
+        class="relative w-36 h-36"
+        [style.background]="remittanceDonutGradient()"
+        style="border-radius: 50%"
+      >
+        <div
+          class="absolute inset-3 bg-white rounded-full flex flex-col items-center justify-center"
+        >
+          <span class="text-2xl font-black text-gray-800">{{ dash()!.kpi.remittance_total }}</span>
+          <span class="text-[10px] text-gray-400 uppercase tracking-wider">Total</span>
+        </div>
+      </div>
+      <div class="flex flex-wrap justify-center gap-3 mt-4 text-xs">
+        <span class="flex items-center gap-1.5"
+          ><span class="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span>Approved
+          {{ dash()!.kpi.remittance_approved }}</span
+        >
+        <span class="flex items-center gap-1.5"
+          ><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span>Rejected
+          {{ dash()!.kpi.remittance_rejected }}</span
+        >
+        <span class="flex items-center gap-1.5"
+          ><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>Pending
+          {{ dash()!.kpi.remittance_pending }}</span
+        >
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl border border-gray-200 p-5 lg:col-span-2">
+      <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700">Daily Remittance Revenue</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Total revenue of approved remittances per day</p>
+        </div>
+        <div class="flex items-center gap-4 text-xs">
+          <span class="flex items-center gap-1"
+            ><span class="w-3 h-3 rounded-sm bg-[#1E5AAA] inline-block"></span>Weekdays</span
+          >
+          <span class="flex items-center gap-1"
+            ><span class="w-3 h-3 rounded-sm bg-sky-300 inline-block"></span>Weekends</span
+          >
+        </div>
+      </div>
+      @if (remittanceDailyBars().length && dash()!.kpi.remittance_revenue_in_range > 0) {
+        <div class="relative h-36" (mouseleave)="trendHoverIndex.set(null)">
+          <div class="flex items-end gap-1 h-full">
+            @for (b of remittanceDailyBars(); track b.key; let i = $index) {
+              <div
+                class="flex-1 min-w-0 h-full flex items-end cursor-pointer"
+                (mouseenter)="trendHoverIndex.set(i)"
+              >
+                <div
+                  class="w-full rounded-t transition-all"
+                  [class]="
+                    (b.weekend ? 'bg-sky-300' : 'bg-[#1E5AAA]') +
+                    (trendHoverIndex() === i ? ' opacity-80' : '')
+                  "
+                  [style.height.%]="b.value > 0 ? (b.value / maxRemittanceDaily()) * 100 : 0"
+                  [style.min-height.px]="b.value > 0 ? 4 : 0"
+                ></div>
+              </div>
+            }
+          </div>
+          @if (trendHovered(); as t) {
+            <div
+              class="absolute top-0 z-10 -translate-x-1/2 pointer-events-none bg-gray-900 text-white rounded-lg px-3 py-2 text-xs shadow-lg whitespace-nowrap"
+              [style.left.%]="tooltipLeft(t.xPct)"
+            >
+              <p class="font-semibold mb-0.5">
+                {{ t.label }}
+                <span class="font-normal text-gray-300"
+                  >· {{ t.weekend ? 'Weekend' : 'Weekday' }}</span
+                >
+              </p>
+              <p class="flex items-center gap-1.5">
+                <span
+                  class="w-2 h-2 rounded-full"
+                  [class]="t.weekend ? 'bg-sky-300' : 'bg-[#1E5AAA]'"
+                ></span>
+                {{ t.value | currency: 'PHP' : 'symbol' : '1.0-0' }} total revenue
+              </p>
+            </div>
+          }
+        </div>
+        <!-- Day-of-week labels (weekend days highlighted); day-of-month underneath -->
+        <div class="flex gap-1 mt-1">
+          @for (b of remittanceDailyBars(); track b.key) {
+            <div class="flex-1 min-w-0 text-center leading-tight">
+              <p
+                class="text-[10px] font-semibold"
+                [class]="b.weekend ? 'text-sky-500' : 'text-gray-500'"
+              >
+                {{ remittanceDailyBars().length <= 16 ? b.dow : b.dow.charAt(0) }}
+              </p>
+              @if (remittanceDailyBars().length <= 31) {
+                <p class="text-[9px] text-gray-400">{{ b.day }}</p>
+              }
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="flex items-center justify-center h-32 text-gray-300 text-sm">
+          No approved remittances in this range
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- ── Passengers by Day of Week (coloured by demand factor) ─────────── -->
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <div class="flex flex-wrap items-start justify-between gap-2 mb-4">
+      <div>
+        <h3 class="text-sm font-semibold text-gray-700">Busiest Days of the Week</h3>
+        <p class="text-xs text-gray-400 mt-0.5">
+          Typical passenger volume per weekday, based on the last 12 weeks · colour compares each day with the average (× factor)
+        </p>
+      </div>
+      <div class="flex items-center gap-4 text-xs">
+        <span class="flex items-center gap-1"
+          ><span class="w-3 h-3 rounded-sm bg-green-400 inline-block"></span>High demand</span
+        >
+        <span class="flex items-center gap-1"
+          ><span class="w-3 h-3 rounded-sm bg-gray-300 inline-block"></span>Average</span
+        >
+        <span class="flex items-center gap-1"
+          ><span class="w-3 h-3 rounded-sm bg-red-300 inline-block"></span>Low demand</span
+        >
+      </div>
+    </div>
+    @if (dayOfWeekBars().some((b) => b.value > 0)) {
+      <div class="flex gap-3">
+        @for (b of dayOfWeekBars(); track b.label) {
+          <div class="flex-1 min-w-0 flex flex-col items-center gap-1">
+            <span class="text-[11px] font-semibold text-gray-700">{{ b.value | number }}</span>
+            <div class="w-full h-32 flex items-end">
+              <div
+                class="w-full rounded-t-md transition-all"
+                [class]="dayBarClass(b.factor)"
+                [style.height.%]="(b.value / maxDayOfWeek()) * 100"
+                style="min-height: 4px"
+              ></div>
+            </div>
+            <span class="text-[11px] font-semibold text-gray-600">{{ b.label }}</span>
+            @if (b.factor !== null) {
+              <span class="text-[10px]" [class]="dayTextClass(b.factor)"
+                >{{ b.factor | number: '1.2-2' }}×</span
+              >
+            }
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="flex items-center justify-center h-36 text-gray-300 text-sm">No data yet</div>
+    }
+  </div>
+  </div>
+
+  <!-- ── Insights (right column; stacks below on smaller screens) ───────── -->
+  <aside class="w-full xl:w-80 shrink-0 xl:sticky xl:top-0">
+    <div
+      class="bg-white rounded-xl border border-gray-200 p-5 xl:max-h-[calc(100vh-6.5rem)] xl:overflow-y-auto"
+    >
+      <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-1">
+        <i class="pi pi-lightbulb text-amber-500"></i> Insights
+      </h3>
+      <p class="text-xs text-gray-400 mb-4">What the numbers above are saying for this period.</p>
+      @if (insights().length === 0) {
+        <p class="text-sm text-gray-400">
+          Not enough data yet — insights appear as trips, tickets and remittances are recorded.
+        </p>
+      } @else {
+        <ul class="space-y-3">
+          @for (insight of insights(); track insight.title) {
+            <li class="flex gap-3 rounded-lg p-3" [class]="insightStyle(insight.tone).bg">
+              <i
+                class="pi text-sm mt-0.5 shrink-0"
+                [class]="insightStyle(insight.tone).icon + ' ' + insightStyle(insight.tone).text"
+              ></i>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-gray-800">{{ insight.title }}</p>
+                <p class="text-xs text-gray-600 mt-0.5 leading-relaxed">{{ insight.message }}</p>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </aside>
+  </div>
+}
+<!-- end @else -->

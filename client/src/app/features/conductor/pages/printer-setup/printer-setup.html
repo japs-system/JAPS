@@ -1,0 +1,78 @@
+<div class="max-w-xl mx-auto bg-white rounded-2xl p-6 shadow-md border border-gray-100 mt-8">
+  <h2 class="text-lg font-bold text-gray-800 mb-2">Printer Setup</h2>
+  <p class="text-sm text-gray-500 mb-4">
+    Ticketing requires a Bluetooth thermal printer. Connect directly over Bluetooth below,
+    then send a test print to confirm it works.
+  </p>
+
+  @if (isConfigured()) {
+    <div class="bg-green-50 border border-green-200 rounded-xl p-4 mb-4 text-sm text-green-800">
+      Printer setup is complete on this device.
+    </div>
+    <button
+      (click)="reconfigure()"
+      class="text-xs font-bold text-gray-500 hover:text-gray-700 underline cursor-pointer"
+    >
+      Reconfigure printer
+    </button>
+  } @else {
+    @if (!isConnected()) {
+      <button
+        (click)="connectPrinter()"
+        [disabled]="connecting()"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+      >
+        {{ connecting() ? 'Connecting...' : 'Connect Printer' }}
+      </button>
+    } @else {
+      <div
+        class="bg-green-50 border border-green-200 rounded-xl p-3 mb-4 text-sm text-green-800 flex items-center justify-between gap-2"
+      >
+        <span class="flex items-center gap-2">
+          <i class="pi pi-check-circle"></i> Connected to {{ deviceName() }}
+        </span>
+        @if (batteryLevel() !== null) {
+          <span class="font-bold {{ batteryColorClass() }}">{{ batteryLevel() }}%</span>
+        }
+      </div>
+
+      <button
+        (click)="sendTestPrint()"
+        [disabled]="printing()"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+      >
+        {{ printing() ? 'Printing...' : 'Send Test Print' }}
+      </button>
+    }
+
+    @if (connectError()) {
+      <p class="text-xs text-red-600 mt-3">{{ connectError() }}</p>
+    }
+
+    @if (showConfirmation()) {
+      <div class="mt-5 border-t border-gray-100 pt-4">
+        <p class="text-sm font-semibold text-gray-700 mb-3">Did the test receipt print?</p>
+        <div class="flex gap-3">
+          <button
+            (click)="confirmSuccess()"
+            class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl cursor-pointer"
+          >
+            Yes
+          </button>
+          <button
+            (click)="confirmFailure()"
+            class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-xl cursor-pointer"
+          >
+            No
+          </button>
+        </div>
+      </div>
+    }
+
+    @if (showTroubleshooting()) {
+      <div class="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800">
+        Make sure the printer is powered on and has paper, then try the test print again.
+      </div>
+    }
+  }
+</div>

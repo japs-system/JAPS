@@ -1,0 +1,296 @@
+<!-- Page header -->
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h2 class="text-xl font-semibold text-gray-800">Bus Management</h2>
+    <p class="text-sm text-gray-400 mt-0.5">Manage fleet and crew assignments</p>
+  </div>
+  <button
+    (click)="openAdd()"
+    class="flex items-center gap-2 bg-[#1E5AAA] hover:bg-[#174d93] text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors cursor-pointer"
+  >
+    <i class="pi pi-plus text-xs"></i> Add Bus
+  </button>
+</div>
+
+<!-- Table -->
+<div class="bg-white rounded-lg shadow-sm overflow-hidden">
+  <!-- Toolbar -->
+  <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
+    <div class="relative w-56">
+      <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+      <input
+        type="text"
+        placeholder="Search bus or plate number…"
+        [value]="search()"
+        (input)="onSearch($event)"
+        class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 placeholder:text-gray-400"
+      />
+    </div>
+    <select
+      (change)="onStatusFilter($event)"
+      class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white text-gray-600"
+    >
+      <option value="">All Statuses</option>
+      @for (s of STATUSES; track s.value) {
+        <option [value]="s.value">{{ s.label }}</option>
+      }
+    </select>
+    <span class="text-xs text-gray-400 ml-auto">{{ totalItems() }} result{{ totalItems() !== 1 ? 's' : '' }}</span>
+  </div>
+
+  @if (loading()) {
+    <div class="flex items-center justify-center py-16 text-gray-400">
+      <i class="pi pi-spinner pi-spin text-2xl mr-3"></i> Loading buses...
+    </div>
+  } @else if (paged().length === 0) {
+    <div class="flex flex-col items-center justify-center py-16 text-gray-400">
+      <i class="pi pi-truck text-4xl mb-3"></i>
+      <p class="text-sm">No buses found.</p>
+    </div>
+  } @else {
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm whitespace-nowrap">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th (click)="setSort('bus_number')" class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none">
+            <span class="flex items-center gap-1">Bus No. <i [class]="'pi ' + sortIcon('bus_number') + ' text-xs'"></i></span>
+          </th>
+          <th (click)="setSort('plate_number')" class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none">
+            <span class="flex items-center gap-1">Plate Number <i [class]="'pi ' + sortIcon('plate_number') + ' text-xs'"></i></span>
+          </th>
+          <th (click)="setSort('capacity')" class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none">
+            <span class="flex items-center gap-1">Capacity <i [class]="'pi ' + sortIcon('capacity') + ' text-xs'"></i></span>
+          </th>
+          <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned Driver</th>
+          <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned Conductor</th>
+          <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Default Route</th>
+          <th (click)="setSort('status')" class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none">
+            <span class="flex items-center gap-1">Status <i [class]="'pi ' + sortIcon('status') + ' text-xs'"></i></span>
+          </th>
+          <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        @for (bus of paged(); track bus.id) {
+          <tr class="hover:bg-gray-50 transition-colors">
+            <td class="px-5 py-3 font-medium text-gray-800">{{ bus.bus_number }}</td>
+            <td class="px-5 py-3 text-gray-600">{{ bus.plate_number }}</td>
+            <td class="px-5 py-3 text-gray-600">{{ bus.capacity }}</td>
+            <td class="px-5 py-3 text-gray-600">
+              @if (bus.assignedDriver) {
+                {{ bus.assignedDriver.first_name }} {{ bus.assignedDriver.last_name }}
+              } @else {
+                <span class="text-gray-400">—</span>
+              }
+            </td>
+            <td class="px-5 py-3 text-gray-600">
+              @if (bus.assignedConductor) {
+                {{ bus.assignedConductor.first_name }} {{ bus.assignedConductor.last_name }}
+              } @else {
+                <span class="text-gray-400">—</span>
+              }
+            </td>
+            <td class="px-5 py-3 text-gray-600">
+              @if (bus.defaultRoute) {
+                <div
+                  class="max-w-[260px] truncate"
+                  [title]="bus.defaultRoute.origin + ' → ' + bus.defaultRoute.destination"
+                >
+                  {{ bus.defaultRoute.origin }} → {{ bus.defaultRoute.destination }}
+                </div>
+              } @else {
+                <span class="text-gray-400">—</span>
+              }
+            </td>
+            <td class="px-5 py-3">
+              @if (bus.status === 'active') {
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                  <i class="pi pi-check-circle text-xs"></i> Active
+                </span>
+              } @else if (bus.status === 'inactive') {
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
+                  <i class="pi pi-times-circle text-xs"></i> Inactive
+                </span>
+              } @else {
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700">
+                  <i class="pi pi-wrench text-xs"></i> Under Maintenance
+                </span>
+              }
+            </td>
+            <td class="px-5 py-3">
+              <div class="flex items-center gap-1">
+                <button
+                  (click)="openAssignCrew(bus)"
+                  class="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                  title="Assign Crew"
+                >
+                  <i class="pi pi-users text-sm"></i>
+                </button>
+                <button
+                  (click)="openEdit(bus)"
+                  class="p-1.5 text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                  title="Edit"
+                >
+                  <i class="pi pi-pencil text-sm"></i>
+                </button>
+                <button
+                  (click)="confirmDelete(bus)"
+                  class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Delete"
+                >
+                  <i class="pi pi-trash text-sm"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    </div>
+
+    <app-table-pagination
+      [currentPage]="currentPage()"
+      [totalPages]="totalPages()"
+      [totalItems]="totalItems()"
+      [pageSize]="pageSize()"
+      [pageStart]="pageStart()"
+      [pageEnd]="pageEnd()"
+      [pageNumbers]="pageNumbers()"
+      [pageSizes]="PAGE_SIZES"
+      (pageChange)="setPage($event)"
+      (pageSizeChange)="onPageSizeChange($event)"
+    />
+  }
+</div>
+
+<!-- Add / Edit Bus Modal -->
+@if (showModal()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="closeModal()"></div>
+    <div class="alert-modal-card relative bg-white rounded-lg shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+      <div class="flex items-center justify-between px-8 pt-8 pb-4 shrink-0">
+        <h3 class="text-lg font-semibold text-gray-900">{{ editingBus() ? 'Edit Bus' : 'Add Bus' }}</h3>
+        <button (click)="closeModal()" class="text-gray-400 hover:text-gray-600 cursor-pointer">
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+      <form [formGroup]="form" (ngSubmit)="save()" novalidate class="flex flex-col flex-1 min-h-0">
+        <div class="flex-1 overflow-y-auto px-8 py-2 flex flex-col gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Bus Number <span class="text-red-500">*</span></label>
+            <input formControlName="bus_number" type="text" placeholder="e.g. BUS-001"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+              [class.border-red-400]="fieldError(form, 'bus_number')" />
+            @if (fieldError(form, 'bus_number')) { <p class="text-red-500 text-xs mt-0.5">Required</p> }
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Plate Number <span class="text-red-500">*</span></label>
+            <input formControlName="plate_number" type="text" placeholder="e.g. ABC 1234"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+              [class.border-red-400]="fieldError(form, 'plate_number')" />
+            @if (fieldError(form, 'plate_number')) { <p class="text-red-500 text-xs mt-0.5">Required</p> }
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Capacity <span class="text-red-500">*</span></label>
+            <input formControlName="capacity" type="number" min="1" placeholder="e.g. 54"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+              [class.border-red-400]="fieldError(form, 'capacity')" />
+            @if (fieldError(form, 'capacity')) { <p class="text-red-500 text-xs mt-0.5">Must be at least 1</p> }
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Status <span class="text-red-500">*</span></label>
+            <select formControlName="status"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300 bg-white">
+              @for (s of STATUSES; track s.value) {
+                <option [value]="s.value">{{ s.label }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Default Route</label>
+            <select formControlName="route_id"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300 bg-white">
+              <option [ngValue]="null">— No default route —</option>
+              @for (r of routes(); track r.id) {
+                <option [ngValue]="r.id">{{ r.origin }} → {{ r.destination }}</option>
+              }
+            </select>
+            <p class="text-xs text-gray-400 mt-1">This route will be pre-filled when scheduling a trip for this bus.</p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 px-8 py-5 border-t border-gray-100 shrink-0">
+          <button type="button" (click)="closeModal()" class="px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#1E5AAA] hover:bg-[#174d93] text-white transition-colors cursor-pointer">
+            {{ editingBus() ? 'Save Changes' : 'Add Bus' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Delete Bus Modal -->
+@if (showDeleteModal()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cancelDelete()"></div>
+    <div class="alert-modal-card relative bg-white rounded-lg shadow-2xl w-full max-w-sm p-8 text-center">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
+        <i class="pi pi-trash text-red-500 text-2xl"></i>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Bus</h3>
+      <p class="text-gray-500 text-sm mb-6">
+        Remove bus <strong>{{ deletingBus()?.bus_number }}</strong>? This cannot be undone.
+      </p>
+      <div class="flex gap-3">
+        <button (click)="cancelDelete()" class="flex-1 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">Cancel</button>
+        <button (click)="deleteBus()" class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer">Delete</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Assign Crew Modal -->
+@if (showCrewModal()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="closeCrewModal()"></div>
+    <div class="alert-modal-card relative bg-white rounded-lg shadow-2xl w-full max-w-md flex flex-col">
+      <div class="flex items-center justify-between px-8 pt-8 pb-4">
+        <div>
+          <h3 class="text-lg font-semibold text-gray-900">Assign Crew</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Bus {{ assigningBus()?.bus_number }}</p>
+        </div>
+        <button (click)="closeCrewModal()" class="text-gray-400 hover:text-gray-600 cursor-pointer">
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+      <form [formGroup]="crewForm" (ngSubmit)="saveCrew()" novalidate>
+        <div class="px-8 py-2 flex flex-col gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Driver</label>
+            <select formControlName="driver_id"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300 bg-white">
+              <option [ngValue]="null">— Unassigned —</option>
+              @for (d of availableDrivers(); track d.id) {
+                <option [ngValue]="d.id">{{ d.first_name }} {{ d.last_name }} ({{ d.employee_id }})</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Conductor</label>
+            <select formControlName="conductor_id"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300 bg-white">
+              <option [ngValue]="null">— Unassigned —</option>
+              @for (c of availableConductors(); track c.id) {
+                <option [ngValue]="c.id">{{ c.first_name }} {{ c.last_name }} ({{ c.employee_id }})</option>
+              }
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 px-8 py-5 border-t border-gray-100 mt-4">
+          <button type="button" (click)="closeCrewModal()" class="px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">Cancel</button>
+          <button type="submit" class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#1E5AAA] hover:bg-[#174d93] text-white transition-colors cursor-pointer">Save Assignment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+}

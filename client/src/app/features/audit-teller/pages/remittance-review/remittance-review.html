@@ -1,0 +1,456 @@
+@if (loading()) {
+  <div class="flex items-center justify-center py-24 text-gray-400">
+    <i class="pi pi-spinner pi-spin text-2xl mr-3"></i> Loading remittance...
+  </div>
+} @else if (!remittance()) {
+  <div class="flex flex-col items-center justify-center py-24 text-gray-400">
+    <i class="pi pi-exclamation-circle text-4xl mb-3"></i>
+    <p class="text-sm">Remittance not found.</p>
+    <a routerLink="/audit-teller/remittances" class="mt-4 text-sm text-[#1E5AAA] hover:underline"
+      >Back to Remittances</a
+    >
+  </div>
+} @else {
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <a
+        routerLink="/audit-teller/remittances"
+        class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
+      >
+        <i class="pi pi-arrow-left text-sm"></i>
+      </a>
+      <div>
+        <h2 class="text-xl font-semibold text-gray-800">
+          Remittance Review
+          <span class="text-gray-400 font-normal text-base ml-1">#{{ remittance()!.id }}</span>
+        </h2>
+        <p class="text-sm text-gray-400 mt-0.5">{{ remittance()!.date | date: 'MMMM dd, yyyy' }}</p>
+      </div>
+    </div>
+    <span
+      class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold capitalize"
+      [class]="getStatusBadge(remittance()!.status)"
+    >
+      {{
+        remittance()!.status === 'submitted'
+          ? remittance()!.resubmitted_at
+            ? 'Updated — Pending Review'
+            : 'Pending Review'
+          : remittance()!.status
+      }}
+    </span>
+  </div>
+
+  <!-- Resubmission notice -->
+  @if (remittance()!.status === 'submitted' && remittance()!.resubmitted_at) {
+    <div
+      class="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm px-4 py-3 rounded-lg mb-6"
+    >
+      <i class="pi pi-refresh"></i>
+      The conductor updated and resubmitted this remittance on
+      {{ remittance()!.resubmitted_at | date: 'medium' }}. It is ready to be approved or rejected
+      again.
+    </div>
+  }
+
+  <!-- Teller remarks banner -->
+  @if (remittance()!.teller_remarks) {
+    <div
+      class="flex items-start gap-2 bg-blue-50 border border-blue-200 text-blue-700 text-sm px-4 py-3 rounded-lg mb-6"
+    >
+      <i class="pi pi-comment mt-0.5 shrink-0"></i>
+      <div>
+        <span class="font-semibold">Teller Remarks:</span> {{ remittance()!.teller_remarks }}
+      </div>
+    </div>
+  }
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <!-- LEFT -->
+    <div class="xl:col-span-2 space-y-6">
+      <!-- Personnel & Bus -->
+      <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4">Personnel & Bus</h3>
+        <div class="grid grid-cols-3 gap-4 text-sm">
+          <div>
+            <p class="text-xs text-gray-400 mb-0.5">Conductor</p>
+            <p class="font-semibold text-gray-800">
+              {{ remittance()!.conductor.first_name }} {{ remittance()!.conductor.last_name }}
+            </p>
+            <p class="text-xs text-gray-500">{{ remittance()!.conductor.employee_id }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400 mb-0.5">Driver</p>
+            <p class="font-semibold text-gray-800">
+              {{ remittance()!.driver.first_name }} {{ remittance()!.driver.last_name }}
+            </p>
+            <p class="text-xs text-gray-500">{{ remittance()!.driver.employee_id }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400 mb-0.5">Bus</p>
+            <p class="font-semibold text-gray-800">Bus {{ remittance()!.BusModel.bus_number }}</p>
+            <p class="text-xs text-gray-500">{{ remittance()!.BusModel.plate_number }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trips -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-gray-700">
+            Trips ({{ remittance()!.Trips.length }})
+          </h3>
+          <span class="text-xs text-gray-400">{{ remittance()!.no_of_trips }} total trips</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th
+                  class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                >
+                  Trip #
+                </th>
+                <th
+                  class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                >
+                  Route
+                </th>
+                <th
+                  class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                >
+                  Departure
+                </th>
+                <th
+                  class="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                >
+                  Tickets
+                </th>
+                <th
+                  class="text-right px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                >
+                  Grand Total
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              @for (trip of remittance()!.Trips; track trip.id) {
+                <tr class="hover:bg-gray-50 cursor-pointer" (click)="toggleTripTickets(trip.id)">
+                  <td class="px-5 py-3 font-medium text-gray-800">{{ trip.trip_number }}</td>
+                  <td class="px-5 py-3 text-gray-600 text-xs">
+                    @if (trip.Route) {
+                      {{ trip.Route.origin }} → {{ trip.Route.destination }}
+                    }
+                  </td>
+                  <td class="px-5 py-3 text-gray-600 text-xs">
+                    {{ trip.departure_time | date: 'shortTime' }}
+                  </td>
+                  <td class="px-5 py-3 text-gray-500 text-xs">
+                    <span class="inline-flex items-center gap-1.5">
+                      <i
+                        class="pi text-[10px] text-gray-400"
+                        [class.pi-chevron-down]="expandedTripId() === trip.id"
+                        [class.pi-chevron-right]="expandedTripId() !== trip.id"
+                      ></i>
+                      {{ trip.ticket_number_start }} – {{ trip.ticket_number_end }}
+                      <span class="text-gray-400">({{ trip.Tickets.length }})</span>
+                    </span>
+                  </td>
+                  <td class="px-5 py-3 text-right font-semibold text-green-600">
+                    {{ trip.grand_total | currency: 'PHP' }}
+                  </td>
+                </tr>
+                @if (expandedTripId() === trip.id) {
+                  <tr>
+                    <td colspan="5" class="bg-gray-50 px-5 py-3">
+                      @if (trip.Tickets.length === 0) {
+                        <p class="text-xs text-gray-400 italic">No tickets recorded for this trip.</p>
+                      } @else {
+                        <table class="w-full text-xs">
+                          <thead>
+                            <tr class="text-gray-400">
+                              <th class="text-left font-semibold py-1.5 pr-3">Ticket #</th>
+                              <th class="text-left font-semibold py-1.5 pr-3">Passengers</th>
+                              <th class="text-left font-semibold py-1.5 pr-3">From</th>
+                              <th class="text-left font-semibold py-1.5 pr-3">To</th>
+                              <th class="text-right font-semibold py-1.5 pr-3">Distance</th>
+                              <th class="text-right font-semibold py-1.5 pr-3">Fare</th>
+                              <th class="text-right font-semibold py-1.5">Issued</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-gray-200">
+                            @for (ticket of trip.Tickets; track ticket.id) {
+                              <tr class="text-gray-700">
+                                <td class="py-1.5 pr-3 font-medium">{{ ticket.ticket_number }}</td>
+                                <td class="py-1.5 pr-3">{{ passengerSummary(ticket) }}</td>
+                                <td class="py-1.5 pr-3">{{ ticket.boarding_point ?? '—' }}</td>
+                                <td class="py-1.5 pr-3">{{ ticket.dropping_point ?? '—' }}</td>
+                                <td class="py-1.5 pr-3 text-right">{{ ticket.distance_km }} km</td>
+                                <td class="py-1.5 pr-3 text-right font-semibold text-green-600">
+                                  {{ ticket.fare | currency: 'PHP' }}
+                                </td>
+                                <td class="py-1.5 text-right text-gray-400">
+                                  {{ ticket.issued_at | date: 'shortTime' }}
+                                </td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Expenses (read-only) -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-gray-700">Trip Expenses</h3>
+        </div>
+        @if (remittance()!.RemittanceExpenses.length > 0) {
+          <div class="divide-y divide-gray-100">
+            @for (exp of remittance()!.RemittanceExpenses; track exp.id) {
+              <div class="flex justify-between px-5 py-3 text-sm">
+                <span class="text-gray-600">{{ formatExpenseType(exp.expense_type) }}</span>
+                <span class="font-semibold text-red-600">{{ exp.amount | currency: 'PHP' }}</span>
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="px-5 py-4 text-sm text-gray-400 italic">No expenses recorded.</p>
+        }
+        <div
+          class="flex justify-between px-5 py-3 bg-red-50 border-t border-red-100 text-sm font-bold text-red-700"
+        >
+          <span>Total Expenses</span>
+          <span>{{ remittance()!.total_expenses | currency: 'PHP' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="space-y-6">
+      <!-- Financial Summary (read-only) -->
+      <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 class="text-sm font-semibold text-gray-700 mb-4 pb-3 border-b border-gray-100">
+          Financial Summary
+        </h3>
+        <div class="space-y-2.5 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-500">Gross Income</span>
+            <span class="font-semibold text-green-600">{{
+              remittance()!.gross_income | currency: 'PHP'
+            }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Total Expenses</span>
+            <span class="font-semibold text-red-600"
+              >-{{ remittance()!.total_expenses | currency: 'PHP' }}</span
+            >
+          </div>
+          <div class="flex justify-between border-t border-gray-100 pt-2.5 font-semibold">
+            <span class="text-gray-800">Net Gross</span>
+            <span class="text-gray-900">{{ remittance()!.net_gross | currency: 'PHP' }}</span>
+          </div>
+
+          <div class="flex justify-between font-semibold">
+            <span class="text-amber-600">Total Less</span>
+            <span class="text-amber-600">-{{ remittance()!.total_less | currency: 'PHP' }}</span>
+          </div>
+          <div class="ml-1 pl-3 border-l-2 border-amber-200 space-y-1.5 text-xs">
+            <div class="flex justify-between">
+              <span class="text-gray-400">Driver Commission</span>
+              <span class="text-amber-600"
+                >-{{ remittance()!.driver_commission | currency: 'PHP' : 'symbol' : '1.0-0' }}.00</span
+              >
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-400">Conductor Commission</span>
+              <span class="text-amber-600"
+                >-{{ remittance()!.conductor_commission | currency: 'PHP' : 'symbol' : '1.0-0' }}.00</span
+              >
+            </div>
+            @if (+remittance()!.bonus_allowance > 0) {
+              <div class="flex justify-between">
+                <span class="text-gray-400">Bonus / Allowance</span>
+                <span class="text-amber-600"
+                  >-{{ remittance()!.bonus_allowance | currency: 'PHP' }}</span
+                >
+              </div>
+            }
+            @if (+remittance()!.other_deductions > 0) {
+              <div class="flex justify-between">
+                <span class="text-gray-400">Other Deductions</span>
+                <span class="text-amber-600"
+                  >-{{ remittance()!.other_deductions | currency: 'PHP' }}</span
+                >
+              </div>
+            }
+            <div class="flex justify-between">
+              <span class="text-gray-400">Cash Deposit</span>
+              <span class="text-amber-600">-{{ remittance()!.cash_deposit | currency: 'PHP' }}</span>
+            </div>
+          </div>
+
+          <div
+            class="flex justify-between bg-blue-50 border border-dashed border-blue-200 rounded-lg p-3 font-bold text-[#1E5AAA]"
+          >
+            <span>Net Collection</span>
+            <span>{{ remittance()!.net_collection | currency: 'PHP' }}</span>
+          </div>
+          <div
+            class="flex items-center justify-between bg-green-50 border-2 border-green-500 rounded-xl px-4 py-4 text-green-700"
+          >
+            <span class="font-bold">Total Revenue</span>
+            <span class="text-2xl font-bold">{{ totalRevenue() | currency: 'PHP' }}</span>
+          </div>
+
+          <!-- Saved result of the review (after approve / reject) -->
+          @if (remittance()!.cash_received !== null && remittance()!.cash_received !== undefined) {
+            <div class="pt-2 border-t border-gray-100 space-y-1 text-xs">
+              <div class="flex justify-between">
+                <span class="text-gray-500">Cash Received</span>
+                <span class="font-semibold text-gray-800">{{
+                  remittance()!.cash_received | currency: 'PHP'
+                }}</span>
+              </div>
+              @if (savedDifference() !== 0) {
+                <div class="flex justify-between text-red-600 font-semibold">
+                  <span>Discrepancy</span>
+                  <span
+                    >{{ savedDifference() > 0 ? '+' : '-'
+                    }}{{
+                      (savedDifference() < 0 ? -savedDifference() : savedDifference())
+                        | currency: 'PHP'
+                    }}</span
+                  >
+                </div>
+              }
+            </div>
+          }
+
+          @if (
+            +remittance()!.driver_officer_share > 0 || +remittance()!.conductor_officer_share > 0
+          ) {
+            <div class="pt-1 space-y-1 text-xs">
+              <p class="text-gray-400 font-medium">Officer Shares</p>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Driver Share</span>
+                <span class="text-gray-700">{{
+                  remittance()!.driver_officer_share | currency: 'PHP'
+                }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Conductor Share</span>
+                <span class="text-gray-700">{{
+                  remittance()!.conductor_officer_share | currency: 'PHP'
+                }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Metadata -->
+      <div class="bg-white rounded-xl border border-gray-200 p-5 text-xs text-gray-500 space-y-2">
+        <div class="flex justify-between">
+          <span>Submitted</span>
+          <span class="text-gray-700">{{ remittance()!.submitted_at | date: 'medium' }}</span>
+        </div>
+        @if (remittance()!.approved_at) {
+          <div class="flex justify-between">
+            <span>{{ remittance()!.status === 'approved' ? 'Approved' : 'Reviewed' }}</span>
+            <span class="text-gray-700">{{ remittance()!.approved_at | date: 'medium' }}</span>
+          </div>
+        }
+        @if (remittance()!.approver) {
+          <div class="flex justify-between">
+            <span>Reviewed by</span>
+            <span class="text-gray-700"
+              >{{ remittance()!.approver!.first_name }}
+              {{ remittance()!.approver!.last_name }}</span
+            >
+          </div>
+        }
+      </div>
+
+      <!-- Actions (pending only) -->
+      @if (remittance()!.status === 'submitted') {
+        <div class="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+          <h3 class="text-sm font-semibold text-gray-700">Actions</h3>
+
+          <!-- CASH RECEIVED INPUT -->
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Cash Received</label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">₱</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                (input)="onCashReceivedChange($event)"
+                class="w-full pl-7 pr-3 py-2 text-sm font-semibold border-2 rounded-lg outline-none transition-colors"
+                [class.border-gray-300]="cashStatus() === 'empty'"
+                [class.border-green-500]="cashStatus() === 'match'"
+                [class.bg-green-50]="cashStatus() === 'match'"
+                [class.text-green-700]="cashStatus() === 'match'"
+                [class.border-red-500]="cashStatus() === 'discrepancy'"
+                [class.bg-red-50]="cashStatus() === 'discrepancy'"
+                [class.text-red-700]="cashStatus() === 'discrepancy'"
+              />
+            </div>
+            @if (cashStatus() === 'match') {
+              <p class="mt-1.5 text-xs font-medium text-green-600 flex items-center gap-1">
+                <i class="pi pi-check-circle"></i> Matches Total Revenue
+              </p>
+            }
+            @if (cashStatus() === 'discrepancy') {
+              <p class="mt-1.5 text-xs font-semibold text-red-600 flex items-center gap-1">
+                <i class="pi pi-exclamation-triangle"></i>
+                Discrepancy detected: {{ difference()! > 0 ? '+' : '-'
+                }}{{ (difference()! < 0 ? -difference()! : difference()!) | currency: 'PHP' }}
+                ({{ difference()! > 0 ? 'over' : 'short' }})
+              </p>
+            }
+          </div>
+
+          <textarea
+            [value]="rejectReason()"
+            (input)="onRejectReasonChange($event)"
+            rows="3"
+            placeholder="Rejection reason (optional)…"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-400/20 resize-none placeholder:text-gray-400"
+          ></textarea>
+          <div class="flex gap-2">
+            <button
+              (click)="reject()"
+              [disabled]="submitting()"
+              class="flex-1 py-2 text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Reject
+            </button>
+            <button
+              (click)="approve()"
+              [disabled]="submitting() || cashReceived() === null"
+              class="flex-1 py-2 text-sm font-medium text-white bg-[#1E5AAA] rounded-lg hover:bg-[#174d93] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              @if (submitting()) {
+                <i class="pi pi-spinner pi-spin text-xs"></i>
+              } @else {
+                <i class="pi pi-check text-xs"></i>
+              }
+              Approve
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}

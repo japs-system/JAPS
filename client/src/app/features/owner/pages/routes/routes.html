@@ -1,0 +1,456 @@
+<!-- Page header -->
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h2 class="text-xl font-semibold text-gray-800">Routes</h2>
+    <p class="text-sm text-gray-400 mt-0.5">Manage bus routes and distances</p>
+  </div>
+  <button
+    (click)="openAdd()"
+    class="flex items-center gap-2 bg-[#1E5AAA] hover:bg-[#174d93] text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors cursor-pointer"
+  >
+    <i class="pi pi-plus text-xs"></i> Add Route
+  </button>
+</div>
+
+<div class="bg-white rounded-lg shadow-sm overflow-hidden">
+  <!-- Toolbar -->
+  <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
+    <div class="relative w-56">
+      <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+      <input
+        type="text"
+        placeholder="Search origin or destination…"
+        [value]="search()"
+        (input)="onSearch($event)"
+        class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 placeholder:text-gray-400"
+      />
+    </div>
+    <span class="text-xs text-gray-400 ml-auto"
+      >{{ totalItems() }} result{{ totalItems() !== 1 ? 's' : '' }}</span
+    >
+  </div>
+
+  @if (loading()) {
+    <div class="flex items-center justify-center py-16 text-gray-400">
+      <i class="pi pi-spinner pi-spin text-2xl mr-3"></i> Loading routes...
+    </div>
+  } @else if (paged().length === 0) {
+    <div class="flex flex-col items-center justify-center py-16 text-gray-400">
+      <i class="pi pi-map text-4xl mb-3"></i>
+      <p class="text-sm">
+        {{ search() ? 'No routes match your search.' : 'No routes configured yet.' }}
+      </p>
+    </div>
+  } @else {
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th
+            class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+          >
+            Origin
+          </th>
+          <th
+            class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+          >
+            Destination
+          </th>
+          <th
+            class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+          >
+            Distance (km)
+          </th>
+          <th
+            class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+          >
+            Actions
+          </th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        @for (route of paged(); track route.id) {
+          <tr class="hover:bg-gray-50 transition-colors">
+            <td class="px-5 py-3 font-medium text-gray-800">{{ route.origin }}</td>
+            <td class="px-5 py-3 text-gray-600">{{ route.destination }}</td>
+            <td class="px-5 py-3 text-gray-600">{{ route.distance_km ?? '—' }}</td>
+            <td class="px-5 py-3">
+              <div class="flex items-center gap-1">
+                <button
+                  (click)="toggleStops(route)"
+                  class="p-1.5 text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                  [title]="expandedRouteId() === route.id ? 'Hide stops' : 'Manage stops'"
+                >
+                  <i
+                    class="pi text-sm"
+                    [class.pi-chevron-down]="expandedRouteId() === route.id"
+                    [class.pi-chevron-right]="expandedRouteId() !== route.id"
+                  ></i>
+                </button>
+                <button
+                  (click)="openEdit(route)"
+                  class="p-1.5 text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                  title="Edit"
+                >
+                  <i class="pi pi-pencil text-sm"></i>
+                </button>
+                <button
+                  (click)="confirmDelete(route)"
+                  class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Delete"
+                >
+                  <i class="pi pi-trash text-sm"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          @if (expandedRouteId() === route.id) {
+            <tr>
+              <td colspan="4" class="bg-gray-50 px-5 py-4">
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    Stops for {{ route.origin }} → {{ route.destination }}
+                  </h4>
+                  <button
+                    (click)="openAddStop()"
+                    class="flex items-center gap-1.5 text-xs font-semibold text-[#1E5AAA] hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <i class="pi pi-plus text-[10px]"></i> Add Stop
+                  </button>
+                </div>
+                <p class="text-[10px] text-gray-400 mb-2">
+                  {{ route.origin }} = 0 km · {{ route.destination }} = {{ route.distance_km ?? '—' }} km ·
+                  every km value below is that stop's distance from {{ route.origin }}.
+                </p>
+                @if (loadingStops()) {
+                  <p class="text-xs text-gray-400">Loading stops...</p>
+                } @else {
+                  <div class="space-y-1.5">
+                    @for (stop of routeStops(); track stop.name + stop.km_from_origin) {
+                      <div
+                        class="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                      >
+                        <span class="font-medium text-gray-700"
+                          >{{ stop.name }} <span class="text-gray-400">— {{ stop.km_from_origin }} km</span></span
+                        >
+                        @if (stop.id) {
+                          <div class="flex items-center gap-1">
+                            <button
+                              (click)="openEditStop(stop)"
+                              class="p-1 text-gray-400 hover:text-[#1E5AAA] rounded transition-colors cursor-pointer"
+                              title="Edit stop"
+                            >
+                              <i class="pi pi-pencil text-[11px]"></i>
+                            </button>
+                            <button
+                              (click)="deleteStop(stop)"
+                              class="p-1 text-gray-400 hover:text-red-500 rounded transition-colors cursor-pointer"
+                              title="Delete stop"
+                            >
+                              <i class="pi pi-trash text-[11px]"></i>
+                            </button>
+                          </div>
+                        } @else {
+                          <span class="text-[10px] text-gray-400 italic">terminal</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+    </div>
+
+    <app-table-pagination
+      [currentPage]="currentPage()"
+      [totalPages]="totalPages()"
+      [totalItems]="totalItems()"
+      [pageSize]="pageSize()"
+      [pageStart]="pageStart()"
+      [pageEnd]="pageEnd()"
+      [pageNumbers]="pageNumbers()"
+      [pageSizes]="PAGE_SIZES"
+      (pageChange)="setPage($event)"
+      (pageSizeChange)="onPageSizeChange($event)"
+    />
+  }
+</div>
+
+<!-- Add/Edit Modal -->
+@if (showModal()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="closeModal()"></div>
+    <div class="alert-modal-card relative bg-white rounded-lg shadow-2xl w-full max-w-md">
+      <div class="flex items-center justify-between px-8 pt-8 pb-4">
+        <h3 class="text-lg font-semibold text-gray-900">
+          {{ editingRoute() ? 'Edit Route' : 'Add Route' }}
+        </h3>
+        <button (click)="closeModal()" class="text-gray-400 hover:text-gray-600 cursor-pointer">
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+
+      <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <div class="px-8 py-2 flex flex-col gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"
+              >Origin <span class="text-red-500">*</span></label
+            >
+            <input
+              formControlName="origin"
+              type="text"
+              placeholder="e.g. Grand Terminal"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+              [class.border-red-400]="fieldError(form, 'origin')"
+            />
+            @if (fieldError(form, 'origin')) {
+              <p class="text-red-500 text-xs mt-0.5">Required</p>
+            }
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"
+              >Destination <span class="text-red-500">*</span></label
+            >
+            <input
+              formControlName="destination"
+              type="text"
+              placeholder="e.g. Calamba Terminal"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+              [class.border-red-400]="fieldError(form, 'destination')"
+            />
+            @if (fieldError(form, 'destination')) {
+              <p class="text-red-500 text-xs mt-0.5">Required</p>
+            }
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"
+              >Total Distance, Origin → Destination (km) <span class="text-red-500">*</span></label
+            >
+            <input
+              formControlName="distance_km"
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="e.g. 24.5"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+              [class.border-red-400]="fieldError(form, 'distance_km')"
+            />
+            @if (fieldError(form, 'distance_km')) {
+              <p class="text-red-500 text-xs mt-0.5">Required — must be greater than 0.</p>
+            }
+            <p class="text-[10px] text-gray-400 mt-1">
+              How far the Destination is from the Origin, i.e. the full route length. Every stop's
+              distance is measured against this number.
+            </p>
+          </div>
+
+          <div class="border-t border-gray-100 pt-4">
+              <label class="block text-xs font-medium text-gray-600 mb-2"
+                >Stopovers (optional) — distance measured from the Origin</label
+              >
+
+              @if (loadingModalStops()) {
+                <p class="text-xs text-gray-400 mb-3">
+                  <i class="pi pi-spin pi-spinner text-[11px]"></i> Loading stops…
+                </p>
+              } @else if (pendingStops().length > 0) {
+                <div class="space-y-1.5 mb-3 max-h-48 overflow-y-auto">
+                  @for (stop of pendingStops(); track stop.km_from_origin) {
+                    <div
+                      class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs"
+                    >
+                      <span class="font-medium text-gray-700"
+                        >{{ stop.name }} <span class="text-gray-400">— {{ stop.km_from_origin }} km</span></span
+                      >
+                      <span class="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          (click)="editPendingStop(stop)"
+                          class="p-1 text-gray-400 hover:text-[#1E5AAA] rounded transition-colors cursor-pointer"
+                          title="Edit stop"
+                        >
+                          <i class="pi pi-pencil text-[11px]"></i>
+                        </button>
+                        <button
+                          type="button"
+                          (click)="removePendingStop(stop)"
+                          class="p-1 text-gray-400 hover:text-red-500 rounded transition-colors cursor-pointer"
+                          title="Remove stop"
+                        >
+                          <i class="pi pi-times text-[11px]"></i>
+                        </button>
+                      </span>
+                    </div>
+                  }
+                </div>
+              } @else if (editingRoute()) {
+                <p class="text-xs text-gray-400 mb-3">This route has no stopovers yet.</p>
+              }
+
+              <div class="flex gap-2">
+                <input
+                  type="text"
+                  [value]="newStopName()"
+                  (input)="onNewStopNameInput($event)"
+                  placeholder="Stop name"
+                  class="flex-1 min-w-0 border rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+                />
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  [value]="newStopKm()"
+                  (input)="onNewStopKmInput($event)"
+                  placeholder="km from origin"
+                  class="w-28 border rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+                />
+                <button
+                  type="button"
+                  (click)="addPendingStop()"
+                  class="px-3 py-2 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors cursor-pointer"
+                >
+                  {{ editingPendingStopId() != null ? 'Update' : 'Add' }}
+                </button>
+              </div>
+              @if (pendingStopError()) {
+                <p class="text-red-500 text-xs mt-1.5">{{ pendingStopError() }}</p>
+              }
+              <p class="text-[10px] text-gray-400 mt-1.5">
+                Enter each stop's distance from the Origin above — not from the stop before it.
+                Changes to stopovers are saved together with the route.
+              </p>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 px-8 py-5 border-t border-gray-100 mt-4">
+          <button
+            type="button"
+            (click)="closeModal()"
+            class="px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#1E5AAA] hover:bg-[#174d93] text-white transition-colors cursor-pointer"
+          >
+            {{ editingRoute() ? 'Save Changes' : 'Add Route' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Add/Edit Stop Modal -->
+@if (showStopModal()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="closeStopModal()"></div>
+    <div class="alert-modal-card relative bg-white rounded-lg shadow-2xl w-full max-w-md">
+      <div class="flex items-center justify-between px-8 pt-8 pb-4">
+        <h3 class="text-lg font-semibold text-gray-900">
+          {{ editingStop() ? 'Edit Stop' : 'Add Stop' }}
+        </h3>
+        <button (click)="closeStopModal()" class="text-gray-400 hover:text-gray-600 cursor-pointer">
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+
+      <form [formGroup]="stopForm" (ngSubmit)="saveStop()" novalidate>
+        <div class="px-8 py-2 flex flex-col gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"
+              >Stop Name <span class="text-red-500">*</span></label
+            >
+            <input
+              formControlName="name"
+              type="text"
+              placeholder="e.g. 2nd Terminal"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+              [class.border-red-400]="fieldError(stopForm, 'name')"
+            />
+            @if (fieldError(stopForm, 'name')) {
+              <p class="text-red-500 text-xs mt-0.5">Required</p>
+            }
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1"
+              >Distance from Origin (km) <span class="text-red-500">*</span></label
+            >
+            <input
+              formControlName="km_from_origin"
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="e.g. 20"
+              class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
+              [class.border-red-400]="fieldError(stopForm, 'km_from_origin')"
+            />
+            @if (fieldError(stopForm, 'km_from_origin')) {
+              <p class="text-red-500 text-xs mt-0.5">Must be a positive number, less than the route's total distance.</p>
+            }
+            <p class="text-[10px] text-gray-400 mt-1">
+              Measured from the route's Origin terminal — not from the stop before this one.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 px-8 py-5 border-t border-gray-100 mt-4">
+          <button
+            type="button"
+            (click)="closeStopModal()"
+            class="px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#1E5AAA] hover:bg-[#174d93] text-white transition-colors cursor-pointer"
+          >
+            {{ editingStop() ? 'Save Changes' : 'Add Stop' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- Delete Modal -->
+@if (showDeleteModal()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cancelDelete()"></div>
+    <div
+      class="alert-modal-card relative bg-white rounded-lg shadow-2xl w-full max-w-sm p-8 text-center"
+    >
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
+        <i class="pi pi-trash text-red-500 text-2xl"></i>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Route</h3>
+      <p class="text-gray-500 text-sm mb-6">
+        Remove <strong>{{ deletingRoute()?.origin }} → {{ deletingRoute()?.destination }}</strong
+        >? This cannot be undone.
+      </p>
+      <div class="flex gap-3">
+        <button
+          (click)="cancelDelete()"
+          class="flex-1 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          (click)="deleteRoute()"
+          class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+}

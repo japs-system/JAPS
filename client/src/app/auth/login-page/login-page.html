@@ -1,0 +1,145 @@
+<div class="min-h-screen flex bg-[#1E5AAA]">
+  <!-- ─── LEFT: Branding panel ─────────────────────────────────────────── -->
+  <div class="hidden lg:flex lg:w-1/2 relative flex-col items-center justify-center p-12">
+    <!-- Background image -->
+    <div
+      class="absolute inset-0 bg-cover bg-center bg-no-repeat"
+      style="background-image: url('assets/images/bg.png')"
+    ></div>
+    <!-- Blue overlay -->
+    <div class="absolute inset-0 bg-[#1E5AAA]/85"></div>
+    <div class="absolute inset-0 bg-gradient-to-t from-[#103e7a]/60 via-transparent to-[#103e7a]/30"></div>
+    <!-- Content -->
+    <div class="relative z-10 flex flex-col items-center text-center">
+      <img
+        src="assets/images/JAPS Transport (white).png"
+        alt="JAPS Transport"
+        class="w-[75%] mb-4 drop-shadow-lg"
+      />
+      <p class="text-white text-base font-medium leading-relaxed w-[75%] drop-shadow-md">
+        Easily track daily remittances, manage trips, and use smart forecasting to improve your
+        operations and grow your business.
+      </p>
+    </div>
+  </div>
+
+  <!-- ─── RIGHT: Login form ─────────────────────────────────────────────── -->
+  <div class="w-full lg:w-1/2 flex flex-col items-center justify-center px-8 py-12 bg-white">
+    <div class="w-full max-w-sm">
+      <!-- Header -->
+      <div class="mb-8">
+        <!-- Mobile: full-width JAPS Transport badge; Desktop: compact JAPS icon badge -->
+        <div class="mb-5">
+          <!-- Desktop -->
+          <div class="hidden lg:flex justify-center">
+            <img src="assets/images/JAPS.png" alt="JAPS" class="h-14 w-auto object-contain">
+          </div>
+          <!-- Mobile: full-width logo matching input outer width -->
+          <div class="lg:hidden w-full">
+            <img
+              src="assets/images/JAPS.png"
+              alt="JAPS Transport"
+              class="w-full max-w-none h-auto block p-4 box-border"
+            />
+          </div>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Welcome back</h1>
+        <p class="text-gray-400 text-sm mt-1">Sign in to your JAPS account</p>
+      </div>
+
+      <!-- Form -->
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" novalidate>
+        <!-- Username -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
+          <input
+            #usernameInput
+            formControlName="username"
+            type="text"
+            autocomplete="username"
+            placeholder="Enter your username"
+            class="w-full border rounded-lg px-4 py-2.5 text-sm outline-none transition-all duration-150 border-gray-300 focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 placeholder:text-gray-400"
+            [class.border-red-400]="
+              (loginForm.get('username')?.invalid && loginForm.get('username')?.touched) ||
+              errorMessage()
+            "
+          />
+          @if (loginForm.get('username')?.invalid && loginForm.get('username')?.touched) {
+            <p class="text-red-500 text-xs mt-1">Username is required.</p>
+          }
+        </div>
+
+        <!-- Password -->
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+          <div class="relative">
+            <input
+              formControlName="password"
+              [type]="showPassword() ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="Enter your password"
+              class="w-full border rounded-lg px-4 py-2.5 pr-11 text-sm outline-none transition-all duration-150 border-gray-300 focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 placeholder:text-gray-400"
+              [class.border-red-400]="
+                (loginForm.get('password')?.invalid && loginForm.get('password')?.touched) ||
+                errorMessage()
+              "
+              (keydown)="checkCapsLock($event)"
+              (keyup)="checkCapsLock($event)"
+              (blur)="capsLockOn.set(false)"
+            />
+            <button
+              type="button"
+              (click)="togglePassword()"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+            >
+              @if (showPassword()) {
+                <i class="pi pi-eye-slash text-sm"></i>
+              } @else {
+                <i class="pi pi-eye text-sm"></i>
+              }
+            </button>
+          </div>
+          @if (loginForm.get('password')?.invalid && loginForm.get('password')?.touched) {
+            <p class="text-red-500 text-xs mt-1">Password is required.</p>
+          } @else if (capsLockOn()) {
+            <p class="text-amber-600 text-xs mt-1 flex items-center gap-1">
+              <i class="pi pi-exclamation-triangle text-[11px]"></i> Caps Lock is on
+            </p>
+          }
+        </div>
+
+        <!-- Sign-in error -->
+        @if (errorMessage()) {
+          <div
+            role="alert"
+            class="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+          >
+            <i class="pi pi-exclamation-circle mt-0.5 text-sm"></i>
+            <span>{{ errorMessage() }}</span>
+          </div>
+        }
+
+        <!-- Submit -->
+        <button
+          type="submit"
+          [disabled]="loading()"
+          class="w-full bg-[#1E5AAA] hover:bg-[#174d93] active:bg-[#103e7a] text-white cursor-pointer font-semibold py-2.5 rounded-lg text-sm transition-all duration-150 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          @if (loading()) {
+            <i class="pi pi-spinner pi-spin text-sm"></i>
+            Signing in...
+          } @else {
+            Sign In
+          }
+        </button>
+      </form>
+
+      <p class="text-center text-gray-500 text-xs mt-5">
+        Forgot your password? Please contact your administrator.
+      </p>
+
+      <p class="text-center text-gray-500 text-xs mt-8">© 2026 JAPS. All rights reserved.</p>
+    </div>
+  </div>
+</div>

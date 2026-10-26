@@ -1,0 +1,14 @@
+/* Conductor layout styles */
+
+/* Bottom nav active tab */
+.active-tab {
+  color: white !important;
+}
+
+.active-tab .tab-bg {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.active-tab i {
+  text-shadow: none;/* no glow */
+}

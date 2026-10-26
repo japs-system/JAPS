@@ -1,0 +1,461 @@
+<!-- Header -->
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h2 class="text-xl font-semibold text-gray-800">My Trips</h2>
+    <p class="text-sm text-gray-400 mt-0.5">Manage your assigned trips and ticketing</p>
+  </div>
+
+  <!-- View toggle — hidden on mobile (card view only on small screens) -->
+  <div class="hidden sm:flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+    <button
+      (click)="viewMode.set('card')"
+      class="p-1.5 rounded-md transition-all cursor-pointer"
+      [class.bg-white]="viewMode() === 'card'"
+      [class.shadow-sm]="viewMode() === 'card'"
+      [class.text-gray-800]="viewMode() === 'card'"
+      [class.text-gray-400]="viewMode() !== 'card'"
+      title="Card view"
+    >
+      <i class="pi pi-th-large text-sm"></i>
+    </button>
+    <button
+      (click)="viewMode.set('table')"
+      class="p-1.5 rounded-md transition-all cursor-pointer"
+      [class.bg-white]="viewMode() === 'table'"
+      [class.shadow-sm]="viewMode() === 'table'"
+      [class.text-gray-800]="viewMode() === 'table'"
+      [class.text-gray-400]="viewMode() !== 'table'"
+      title="Table view"
+    >
+      <i class="pi pi-list text-sm"></i>
+    </button>
+  </div>
+</div>
+
+<!-- Tabs + search row — stacks on mobile -->
+<div class="flex flex-wrap items-center gap-3 mb-4">
+  <!-- Tabs -->
+  <div class="flex gap-1 bg-gray-100 rounded-xl p-1">
+    <button
+      (click)="activeTab.set('today')"
+      class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+      [class.bg-white]="activeTab() === 'today'"
+      [class.shadow-sm]="activeTab() === 'today'"
+      [class.text-gray-800]="activeTab() === 'today'"
+      [class.text-gray-500]="activeTab() !== 'today'"
+    >
+      <i class="pi pi-calendar-clock text-xs"></i>
+      Today
+      @if (scheduledTodayCount() > 0) {
+        <span
+          class="bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+          >{{ scheduledTodayCount() }}</span
+        >
+      }
+      @if (ongoingCount() > 0) {
+        <span
+          class="bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none animate-pulse"
+          >{{ ongoingCount() }}</span
+        >
+      }
+    </button>
+    <button
+      (click)="activeTab.set('all')"
+      class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+      [class.bg-white]="activeTab() === 'all'"
+      [class.shadow-sm]="activeTab() === 'all'"
+      [class.text-gray-800]="activeTab() === 'all'"
+      [class.text-gray-500]="activeTab() !== 'all'"
+    >
+      <i class="pi pi-history text-xs"></i>
+      All
+      <span
+        class="bg-gray-300 text-gray-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+        >{{ allTrips().length }}</span
+      >
+    </button>
+  </div>
+
+  <!-- Search -->
+  <div class="relative flex-1 min-w-[160px]">
+    <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+    <input
+      type="text"
+      placeholder="Search route, bus, driver…"
+      [value]="search()"
+      (input)="onSearch($event)"
+      class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg bg-white outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 placeholder:text-gray-400"
+    />
+  </div>
+
+  <!-- Status filter -->
+  <select
+    (change)="onStatusFilter($event)"
+    class="w-full sm:w-auto text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white text-gray-600"
+  >
+    <option value="">All Statuses</option>
+    <option value="scheduled">Scheduled</option>
+    <option value="ongoing">Ongoing</option>
+    <option value="completed">Completed</option>
+    <option value="cancelled">Cancelled</option>
+  </select>
+
+  <span class="text-xs text-gray-400 hidden sm:block ml-auto">
+    {{ totalItems() }} trip{{ totalItems() !== 1 ? 's' : '' }}
+  </span>
+</div>
+
+@if (loading()) {
+  <div class="flex items-center justify-center py-16 text-gray-400">
+    <i class="pi pi-spinner pi-spin text-2xl mr-3 text-blue-500"></i>
+    <span class="text-sm">Loading trips...</span>
+  </div>
+} @else if (displayedTrips().length === 0) {
+  <div class="bg-white rounded-2xl p-10 text-center shadow-sm border border-gray-100">
+    <i class="pi pi-calendar text-4xl text-gray-300 mb-3 block"></i>
+    <h3 class="text-base font-bold text-gray-800 mb-1">
+      {{ activeTab() === 'today' ? 'No Trips Today' : 'No Assigned Trips' }}
+    </h3>
+    <p class="text-gray-400 text-sm">
+      {{
+        search() || statusFilter()
+          ? 'No trips match your filters.'
+          : activeTab() === 'today'
+            ? 'You have no trips scheduled for today.'
+            : 'Contact the owner or secretary for trip assignment.'
+      }}
+    </p>
+  </div>
+} @else {
+  <!-- ── CARD VIEW (default on mobile, optional on desktop) ── -->
+  @if (viewMode() === 'card') {
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+      @for (trip of displayedTrips(); track trip.id) {
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col active:shadow-md transition-shadow"
+        >
+          <!-- Card Header -->
+          <div
+            class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between"
+          >
+            <div class="flex items-center gap-2.5">
+              <span
+                class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#1E5AAA]/10 text-[#1E5AAA] font-bold text-sm"
+                >#{{ trip.trip_number }}</span
+              >
+              <div>
+                <p class="text-xs font-medium text-gray-700 leading-tight">
+                  {{ trip.departure_time | date: 'MMM d' }} &bull;
+                  {{ trip.departure_time | date: 'h:mm a' }}
+                </p>
+              </div>
+            </div>
+            <span
+              class="px-2.5 py-1 text-[10px] font-bold rounded-full border uppercase tracking-wide"
+              [class]="getStatusBadgeClass(trip.status)"
+              [class.animate-pulse]="trip.status === 'ongoing'"
+            >
+              {{ trip.status }}
+            </span>
+          </div>
+
+          <!-- Card Body -->
+          <div class="px-4 py-3 flex-1 space-y-2.5">
+            <!-- Route — prominent -->
+            <div class="flex items-start gap-2">
+              <i class="pi pi-map-marker text-[#1E5AAA] mt-0.5 shrink-0 text-sm"></i>
+              <div>
+                <p class="font-semibold text-gray-800 text-sm leading-snug">
+                  {{ trip.Route?.origin ?? '—' }} → {{ trip.Route?.destination ?? '—' }}
+                </p>
+                @if (trip.Route?.distance_km) {
+                  <p class="text-xs text-gray-400 mt-0.5">{{ trip.Route?.distance_km }} km</p>
+                }
+              </div>
+            </div>
+
+            <!-- Bus + Driver in a compact row -->
+            <div class="flex items-center gap-4 text-xs text-gray-500">
+              <span class="flex items-center gap-1">
+                <i class="pi pi-truck text-gray-400 text-xs"></i>
+                <span class="font-medium text-gray-700">{{
+                  trip.BusModel?.bus_number ?? '—'
+                }}</span>
+              </span>
+              <span class="flex items-center gap-1 truncate">
+                <i class="pi pi-user text-gray-400 text-xs"></i>
+                <span class="truncate">{{
+                  trip.driver ? trip.driver.first_name + ' ' + trip.driver.last_name : '—'
+                }}</span>
+              </span>
+            </div>
+
+            <!-- Revenue chip (ongoing/completed) -->
+            @if (trip.status === 'ongoing' || trip.status === 'completed') {
+              <div class="bg-blue-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                <span class="text-[10px] text-blue-500 font-bold uppercase tracking-wider"
+                  >Revenue</span
+                >
+                <span class="font-bold text-blue-800 text-sm">{{
+                  trip.grand_total | currency: 'PHP'
+                }}</span>
+              </div>
+            }
+          </div>
+
+          <!-- Actions — large touch targets -->
+          <div class="px-4 py-3 bg-gray-50 border-t border-gray-100 space-y-2">
+            @if (trip.status === 'scheduled') {
+              @if (!canStartTrip().get(trip.id)) {
+                <p class="text-xs text-gray-400 flex items-center gap-1.5 py-1">
+                  <i class="pi pi-lock text-xs"></i>
+                  Complete the previous trip first.
+                </p>
+              }
+              <div class="flex gap-2">
+                <button
+                  (click)="updateStatus(trip.id, 'ongoing')"
+                  [disabled]="updatingId() === trip.id || !canStartTrip().get(trip.id)"
+                  class="flex-1 bg-[#1E5AAA] hover:bg-[#174d93] text-white font-semibold py-2.5 rounded-xl text-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <i class="pi pi-play-circle text-sm"></i> Start Trip
+                </button>
+                <button
+                  (click)="updateStatus(trip.id, 'cancelled')"
+                  [disabled]="updatingId() === trip.id"
+                  class="w-11 h-11 flex items-center justify-center bg-white hover:bg-red-50 text-red-400 border border-red-200 rounded-xl transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                  title="Cancel"
+                >
+                  <i class="pi pi-times text-sm"></i>
+                </button>
+              </div>
+            } @else if (trip.status === 'ongoing') {
+              <div class="flex gap-2">
+                <a
+                  [routerLink]="['/conductor/ticketing']"
+                  [queryParams]="{ tripId: trip.id }"
+                  class="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <i class="pi pi-ticket text-sm"></i> Ticketing
+                </a>
+                <button
+                  (click)="updateStatus(trip.id, 'completed')"
+                  [disabled]="updatingId() === trip.id"
+                  class="w-11 h-11 flex items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                  title="Mark done"
+                >
+                  <i class="pi pi-check text-sm"></i>
+                </button>
+              </div>
+            } @else if (trip.status === 'completed') {
+              <a
+                [routerLink]="['/conductor/ticketing']"
+                [queryParams]="{ tripId: trip.id }"
+                class="flex w-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm transition-colors items-center justify-center gap-1.5"
+              >
+                <i class="pi pi-eye text-sm"></i> View Tickets
+              </a>
+            } @else {
+              <p class="text-xs text-red-400 italic flex items-center gap-1 py-1">
+                <i class="pi pi-info-circle"></i> Cancelled
+              </p>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Pagination for card view -->
+    @if (totalPages() > 1) {
+      <div class="mt-4 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <app-table-pagination
+          [currentPage]="currentPage()"
+          [totalPages]="totalPages()"
+          [totalItems]="totalItems()"
+          [pageSize]="pageSize()"
+          [pageStart]="pageStart()"
+          [pageEnd]="pageEnd()"
+          [pageNumbers]="pageNumbers()"
+          [pageSizes]="PAGE_SIZES"
+          (pageChange)="setPage($event)"
+          (pageSizeChange)="onPageSizeChange($event)"
+        />
+      </div>
+    }
+  }
+
+  <!-- ── TABLE VIEW (desktop only) ── -->
+  @if (viewMode() === 'table') {
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+              >
+                #
+              </th>
+              <th
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+              >
+                Route
+              </th>
+              <th
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+              >
+                Departure
+              </th>
+              <th
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+              >
+                Bus
+              </th>
+              <th
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+              >
+                Driver
+              </th>
+              <th
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+              >
+                Revenue
+              </th>
+              <th
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+              >
+                Status
+              </th>
+              <th
+                class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+              >
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            @for (trip of displayedTrips(); track trip.id) {
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-5 py-3 font-bold text-gray-800">{{ trip.trip_number }}</td>
+                <td class="px-5 py-3">
+                  <p class="font-medium text-gray-800 text-xs">
+                    {{ trip.Route?.origin }} → {{ trip.Route?.destination }}
+                  </p>
+                  @if (trip.Route?.distance_km) {
+                    <p class="text-[10px] text-gray-400">{{ trip.Route?.distance_km }} km</p>
+                  }
+                </td>
+                <td class="px-5 py-3">
+                  <p class="text-xs font-medium text-gray-700">
+                    {{ trip.departure_time | date: 'h:mm a' }}
+                  </p>
+                  <p class="text-[10px] text-gray-400">
+                    {{ trip.departure_time | date: 'MMM d, y' }}
+                  </p>
+                </td>
+                <td class="px-5 py-3">
+                  <p class="text-xs font-medium text-gray-700">{{ trip.BusModel?.bus_number }}</p>
+                  <p class="text-[10px] text-gray-400">{{ trip.BusModel?.plate_number }}</p>
+                </td>
+                <td class="px-5 py-3 text-xs text-gray-600">
+                  {{ trip.driver ? trip.driver.first_name + ' ' + trip.driver.last_name : '—' }}
+                </td>
+                <td class="px-5 py-3">
+                  @if (trip.status === 'ongoing' || trip.status === 'completed') {
+                    <p class="text-xs font-bold text-blue-600">
+                      {{ trip.grand_total | currency: 'PHP' }}
+                    </p>
+                  } @else {
+                    <p class="text-xs text-gray-400">—</p>
+                  }
+                </td>
+                <td class="px-5 py-3">
+                  <span
+                    class="px-2.5 py-0.5 text-[10px] font-bold rounded-full border uppercase tracking-wide"
+                    [class]="getStatusBadgeClass(trip.status)"
+                    [class.animate-pulse]="trip.status === 'ongoing'"
+                  >
+                    {{ trip.status }}
+                  </span>
+                </td>
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-1">
+                    @if (trip.status === 'scheduled') {
+                      <button
+                        (click)="updateStatus(trip.id, 'ongoing')"
+                        [disabled]="updatingId() === trip.id || !canStartTrip().get(trip.id)"
+                        [title]="
+                          !canStartTrip().get(trip.id)
+                            ? 'Complete the previous trip first'
+                            : 'Start trip'
+                        "
+                        class="p-1.5 text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <i
+                          [class]="
+                            !canStartTrip().get(trip.id)
+                              ? 'pi pi-lock text-sm'
+                              : 'pi pi-play-circle text-sm'
+                          "
+                        ></i>
+                      </button>
+                      <button
+                        (click)="updateStatus(trip.id, 'cancelled')"
+                        [disabled]="updatingId() === trip.id"
+                        class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                        title="Cancel trip"
+                      >
+                        <i class="pi pi-times text-sm"></i>
+                      </button>
+                    } @else if (trip.status === 'ongoing') {
+                      <a
+                        [routerLink]="['/conductor/ticketing']"
+                        [queryParams]="{ tripId: trip.id }"
+                        class="p-1.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
+                        title="Ticketing"
+                      >
+                        <i class="pi pi-ticket text-sm"></i>
+                      </a>
+                      <button
+                        (click)="updateStatus(trip.id, 'completed')"
+                        [disabled]="updatingId() === trip.id"
+                        class="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                        title="Mark as done"
+                      >
+                        <i class="pi pi-check text-sm"></i>
+                      </button>
+                    } @else if (trip.status === 'completed') {
+                      <a
+                        [routerLink]="['/conductor/ticketing']"
+                        [queryParams]="{ tripId: trip.id }"
+                        class="p-1.5 text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 rounded-lg transition-colors"
+                        title="View tickets"
+                      >
+                        <i class="pi pi-eye text-sm"></i>
+                      </a>
+                    } @else {
+                      <span class="text-[10px] text-red-400 italic px-1">Cancelled</span>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <app-table-pagination
+        [currentPage]="currentPage()"
+        [totalPages]="totalPages()"
+        [totalItems]="totalItems()"
+        [pageSize]="pageSize()"
+        [pageStart]="pageStart()"
+        [pageEnd]="pageEnd()"
+        [pageNumbers]="pageNumbers()"
+        [pageSizes]="PAGE_SIZES"
+        (pageChange)="setPage($event)"
+        (pageSizeChange)="onPageSizeChange($event)"
+      />
+    </div>
+  }
+}

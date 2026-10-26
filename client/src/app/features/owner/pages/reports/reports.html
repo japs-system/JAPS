@@ -1,0 +1,124 @@
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-800">Reports</h1>
+    <p class="text-sm text-gray-500">
+      Choose a date range and download the remittance report as an Excel file.
+    </p>
+  </div>
+
+  <!-- Date range -->
+  <div class="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+    <div class="flex flex-wrap gap-2">
+      @for (p of [
+        { key: 'today', label: 'Today' },
+        { key: 'week', label: 'This week' },
+        { key: 'month', label: 'This month' },
+        { key: 'lastMonth', label: 'Last month' }
+      ]; track p.key) {
+        <button
+          type="button"
+          (click)="applyPreset($any(p.key))"
+          class="px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
+          [class]="
+            activePreset() === p.key
+              ? 'bg-[#1E5AAA] text-white border-[#1E5AAA]'
+              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+          "
+        >
+          {{ p.label }}
+        </button>
+      }
+    </div>
+
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="block">
+        <span class="block text-xs font-medium text-gray-500 mb-1">From</span>
+        <input
+          type="date"
+          [value]="from()"
+          [max]="to()"
+          (change)="onFrom($event)"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E5AAA]/30"
+        />
+      </label>
+      <label class="block">
+        <span class="block text-xs font-medium text-gray-500 mb-1">To</span>
+        <input
+          type="date"
+          [value]="to()"
+          [min]="from()"
+          (change)="onTo($event)"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E5AAA]/30"
+        />
+      </label>
+
+      <button
+        type="button"
+        (click)="download()"
+        [disabled]="!rangeValid() || downloading()"
+        class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+      >
+        <i class="pi" [class]="downloading() ? 'pi-spin pi-spinner' : 'pi-file-excel'"></i>
+        {{ downloading() ? 'Preparing…' : 'Download Report' }}
+      </button>
+    </div>
+
+    @if (error()) {
+      <p class="text-sm text-red-600" role="alert">{{ error() }}</p>
+    }
+  </div>
+
+  <!-- Preview -->
+  @if (summary(); as s) {
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+        <h2 class="text-base font-semibold text-gray-800">Preview</h2>
+        <p class="text-xs text-gray-500">
+          {{ s.remittances }} approved remittance{{ s.remittances === 1 ? '' : 's' }} ·
+          {{ s.pending }} pending · {{ s.rejected }} rejected (not counted)
+        </p>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="rounded-lg bg-blue-50 p-4">
+          <p class="text-xs text-gray-500">Total Revenue</p>
+          <p class="text-lg font-bold text-[#1E5AAA]">{{ s.total_revenue | currency: 'PHP' }}</p>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-4">
+          <p class="text-xs text-gray-500">Net Collection</p>
+          <p class="text-lg font-bold text-gray-800">{{ s.net_collection | currency: 'PHP' }}</p>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-4">
+          <p class="text-xs text-gray-500">Cash Deposit</p>
+          <p class="text-lg font-bold text-gray-800">{{ s.cash_deposit | currency: 'PHP' }}</p>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-4">
+          <p class="text-xs text-gray-500">Cash Remitted</p>
+          <p class="text-lg font-bold text-gray-800">{{ s.cash_received | currency: 'PHP' }}</p>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-4">
+          <p class="text-xs text-gray-500">Gross Income</p>
+          <p class="text-lg font-bold text-gray-800">{{ s.gross_income | currency: 'PHP' }}</p>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-4">
+          <p class="text-xs text-gray-500">Expenses</p>
+          <p class="text-lg font-bold text-gray-800">{{ s.total_expenses | currency: 'PHP' }}</p>
+        </div>
+      </div>
+
+      <p class="mt-4 text-xs text-gray-500">
+        @if (from() === to()) {
+          Single day: the Excel file is a <strong>Teller's Report</strong> (one row per bus, gross
+          income, every expense column, commissions, net collection, total revenue and status) plus
+          a <strong>Summary</strong> sheet.
+        } @else {
+          The Excel file has three sheets: <strong>Summary</strong>, <strong>Remittances</strong>
+          (every remittance in the range with its status) and <strong>Daily</strong> (approved
+          totals per day).
+        }
+      </p>
+    </div>
+  } @else if (loading()) {
+    <p class="text-sm text-gray-500">Loading preview…</p>
+  }
+</div>

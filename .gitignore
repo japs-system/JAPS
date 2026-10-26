@@ -1,0 +1,44 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Angular
+client/dist/
+client/tmp/
+client/out-tsc/
+client/.angular/cache/
+client/coverage/
+
+# Build outputs
+dist/
+build/
+
+# IDEs
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.sublime-workspace
+
+# Claude Code worktrees (nested git checkouts — must never be tracked as embedded repos)
+.claude/
+
+# TLS certs (dev-only, self-signed)
+certs/
+
+# System
+.DS_Store
+Thumbs.db
+
+
+CLAUDE.md
+
+docs/

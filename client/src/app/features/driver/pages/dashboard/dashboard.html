@@ -1,0 +1,140 @@
+<div class="mb-6">
+  <h2 class="text-2xl font-bold text-gray-800">Driver Duty Schedule</h2>
+  <p class="text-sm text-gray-500 mt-1">Review your assigned bus, routes, trip schedules, and contact details for assigned conductors.</p>
+</div>
+
+@if (loading()) {
+  <div class="flex items-center justify-center py-20 text-gray-400">
+    <i class="pi pi-spinner pi-spin text-3xl mr-3 text-emerald-500"></i>
+    <span class="text-lg font-medium">Loading your schedule...</span>
+  </div>
+} @else if (trips().length === 0) {
+  <div class="bg-white rounded-2xl p-12 text-center shadow-md max-w-xl mx-auto border border-gray-100 mt-8">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-50 text-emerald-500 mb-4">
+      <i class="pi pi-calendar text-2xl"></i>
+    </div>
+    <h3 class="text-lg font-bold text-gray-800 mb-2">No Scheduled Trips</h3>
+    <p class="text-gray-500 text-sm">You currently do not have any trips assigned to your schedule. Please check with your supervisor or secretary for dispatch schedules.</p>
+  </div>
+} @else {
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    @for (trip of trips(); track trip.id) {
+      <div class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden flex flex-col hover:shadow-lg transition-shadow duration-200">
+        <!-- Card Header -->
+        <div class="px-5 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 font-bold text-sm">
+              #{{ trip.trip_number }}
+            </span>
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Trip Number</span>
+          </div>
+
+          <!-- Status badge -->
+          @if (trip.status === 'scheduled') {
+            <span class="px-2.5 py-1 text-xs font-bold rounded-full bg-blue-50 text-blue-600 border border-blue-100 uppercase tracking-wide">Scheduled</span>
+          } @else if (trip.status === 'ongoing') {
+            <span class="px-2.5 py-1 text-xs font-bold rounded-full bg-amber-50 text-amber-600 border border-amber-100 uppercase tracking-wide animate-pulse">In Transit</span>
+          } @else if (trip.status === 'completed') {
+            <span class="px-2.5 py-1 text-xs font-bold rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-wide">Completed</span>
+          } @else if (trip.status === 'cancelled') {
+            <span class="px-2.5 py-1 text-xs font-bold rounded-full bg-red-50 text-red-600 border border-red-100 uppercase tracking-wide">Cancelled</span>
+          }
+        </div>
+
+        <!-- Card Body -->
+        <div class="p-5 flex-1 space-y-4 text-sm">
+          <!-- Route -->
+          <div>
+            <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Assigned Route</span>
+            <div class="flex items-center gap-2">
+              <i class="pi pi-map text-emerald-600 text-lg"></i>
+              <span class="font-bold text-gray-800 text-base">
+                @if (trip.Route) {
+                  {{ trip.Route.origin }} → {{ trip.Route.destination }}
+                } @else {
+                  —
+                }
+              </span>
+            </div>
+            @if (trip.Route?.distance_km) {
+              <div class="text-xs text-gray-500 mt-1 pl-7">
+                Distance: <span class="font-semibold text-gray-700">{{ trip.Route?.distance_km }} km</span>
+              </div>
+            }
+          </div>
+
+          <!-- Departure / Arrival Time -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Departure Time</span>
+              <div class="flex items-center gap-1.5 text-gray-700">
+                <i class="pi pi-clock text-xs text-gray-400"></i>
+                <span class="font-semibold">{{ trip.departure_time | date: 'h:mm a' }}</span>
+              </div>
+              <span class="text-[10px] text-gray-400 block mt-0.5">{{ trip.departure_time | date: 'MMM d, y' }}</span>
+            </div>
+            @if (trip.arrival_time) {
+              <div>
+                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">Arrival Time</span>
+                <div class="flex items-center gap-1.5 text-gray-700">
+                  <i class="pi pi-check text-xs text-emerald-500"></i>
+                  <span class="font-semibold">{{ trip.arrival_time | date: 'h:mm a' }}</span>
+                </div>
+                <span class="text-[10px] text-gray-400 block mt-0.5">{{ trip.arrival_time | date: 'MMM d, y' }}</span>
+              </div>
+            }
+          </div>
+
+          <!-- Bus & Conductor -->
+          <div class="grid grid-cols-2 gap-4 pt-3 border-t border-gray-50 bg-[#F9FAFB] p-3 rounded-xl">
+            <div>
+              <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Assigned Bus</span>
+              <div class="text-gray-800 font-bold">
+                Bus {{ trip.BusModel?.bus_number || '—' }}
+              </div>
+              <div class="text-xs text-gray-500 font-medium">
+                {{ trip.BusModel?.plate_number || '—' }}
+              </div>
+              <div class="text-[10px] text-gray-400 mt-0.5">
+                Cap: {{ trip.BusModel?.capacity || '—' }} pax
+              </div>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Assigned Conductor</span>
+              <div class="text-gray-800 font-bold">
+                @if (trip.conductor) {
+                  {{ trip.conductor.first_name }} {{ trip.conductor.last_name }}
+                } @else {
+                  —
+                }
+              </div>
+              <div class="text-xs text-emerald-600 font-mono">
+                {{ trip.conductor?.employee_id || '—' }}
+              </div>
+              @if (trip.conductor?.contact_number) {
+                <div class="text-[10px] text-gray-500 mt-1 flex items-center gap-1">
+                  <i class="pi pi-phone text-[9px]"></i>
+                  <span class="font-medium">{{ trip.conductor?.contact_number }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Footer -->
+        <div class="px-5 py-3.5 bg-gray-50 border-t border-gray-100 text-xs flex items-center gap-1.5 text-gray-500">
+          <i class="pi pi-info-circle text-emerald-600"></i>
+          @if (trip.status === 'scheduled') {
+            <span>Await dispatch. Present this schedule at terminal.</span>
+          } @else if (trip.status === 'ongoing') {
+            <span class="text-amber-600 font-semibold animate-pulse">Trip is currently in transit. Drive safely!</span>
+          } @else if (trip.status === 'completed') {
+            <span class="text-emerald-600 font-semibold">Trip completed successfully.</span>
+          } @else {
+            <span class="text-red-500 font-semibold">Trip cancelled.</span>
+          }
+        </div>
+      </div>
+    }
+  </div>
+}

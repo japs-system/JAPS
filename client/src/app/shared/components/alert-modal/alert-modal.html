@@ -1,0 +1,57 @@
+@if (alertService.config(); as config) {
+  <!-- Backdrop -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="alertService.close()"></div>
+
+    <!-- Modal card -->
+    <div
+      class="alert-modal-card relative bg-white rounded-lg shadow-2xl w-full max-w-md p-10 text-center"
+    >
+      <!-- Icon -->
+      @switch (config.type) {
+        @case ('success') {
+          <div
+            class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-5"
+          >
+            <i class="pi pi-check-circle text-green-500 text-3xl"></i>
+          </div>
+        }
+        @case ('error') {
+          <div
+            class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-5"
+          >
+            <i class="pi pi-times-circle text-red-500 text-3xl"></i>
+          </div>
+        }
+        @case ('warning') {
+          <div
+            class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-5"
+          >
+            <i class="pi pi-exclamation-triangle text-amber-500 text-3xl"></i>
+          </div>
+        }
+        @case ('info') {
+          <div
+            class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-5"
+          >
+            <i class="pi pi-info-circle text-[#1E5AAA] text-3xl"></i>
+          </div>
+        }
+      }
+
+      <!-- Title -->
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ config.title }}</h3>
+
+      <!-- Message -->
+      <p class="text-gray-500 text-sm leading-relaxed mb-6">{{ config.message }}</p>
+
+      <!-- Confirm button -->
+      <button
+        (click)="alertService.close()"
+        class="w-full bg-[#1E5AAA] hover:bg-[#174d93] active:bg-[#103e7a] text-white font-semibold py-2.5 rounded-lg text-sm transition-colors duration-150 cursor-pointer"
+      >
+        {{ config.confirmText || 'OK' }}
+      </button>
+    </div>
+  </div>
+}
