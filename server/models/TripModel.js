@@ -17,7 +17,7 @@ module.exports = (sequelize) => {
       bus_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: "buses", key: "id" },
+        references: { model: "bus_info", key: "id" },
       },
       route_id: {
         type: DataTypes.INTEGER,

@@ -22,7 +22,6 @@ export interface Trip {
     origin: string;
     destination: string;
     distance_km: number;
-    minimum_fare: number;
     rate_per_km: number;
   };
   driver?: { id: number; first_name: string; last_name: string; employee_id: string };

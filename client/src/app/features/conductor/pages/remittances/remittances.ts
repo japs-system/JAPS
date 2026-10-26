@@ -181,16 +181,6 @@ export class ConductorRemittancesPage implements OnInit {
   readonly MANUAL_CATEGORIES = MANUAL_CATEGORIES;
   // Manually encoded results, keyed by trip id (only for trips without tickets).
   manualEntries = signal<Record<number, ManualTripEntry>>({});
-  // Unremitted expense-log entries for the selected bus/date.
-  loggedExpenses = signal<LoggedExpense[]>([]);
-  /** Logged expenses that belong to the currently selected trips. */
-  includedLoggedExpenses = computed(() => {
-    const ids = this.selectedTripIds();
-    return this.loggedExpenses().filter((e) => e.trip_id != null && ids.has(e.trip_id));
-  });
-  includedLoggedTotal = computed(() =>
-    this.includedLoggedExpenses().reduce((sum, e) => sum + Number(e.amount), 0),
-  );
 
   // ── Edit & resubmit state (rejected remittances) ──
   readonly EXPENSE_FIELDS = EXPENSE_FIELDS;
@@ -556,7 +546,6 @@ export class ConductorRemittancesPage implements OnInit {
 
   private onTripSelectionChanged(): void {
     this.ensureManualEntries();
-    this.prefillLoggedExpenses();
     this.autoCalculateCommissions();
   }
 
@@ -635,33 +624,14 @@ export class ConductorRemittancesPage implements OnInit {
   // ── Expense log pre-fill ──
   private loadLoggedExpenses(): void {
     const bus = this.selectedBus();
-    this.loggedExpenses.set([]);
     if (!bus) return;
     this.http
       .get<LoggedExpense[]>(`${this.API}/expenses`, {
         params: { date: this.selectedDate(), busId: bus.id.toString(), unremitted: '1' },
         withCredentials: true,
       })
-      .subscribe({
-        next: (data) => {
-          this.loggedExpenses.set(data);
-          this.prefillLoggedExpenses();
-        },
-      });
   }
 
-  /** Fills each expense field with the logged total for the selected trips, unless the
-   *  conductor has already typed their own figure into that field. */
-  private prefillLoggedExpenses(): void {
-    const totals: Record<string, number> = {};
-    for (const e of this.includedLoggedExpenses()) {
-      totals[e.expense_type] = (totals[e.expense_type] ?? 0) + Number(e.amount);
-    }
-    for (const [type, ctrlName] of Object.entries(EXPENSE_CONTROLS)) {
-      const ctrl = this.remittanceForm.get(ctrlName);
-      if (ctrl && !ctrl.dirty) ctrl.setValue(+(totals[type] ?? 0).toFixed(2));
-    }
-  }
 
   isSelected(id: number): boolean {
     return this.selectedTripIds().has(id);
@@ -788,7 +758,6 @@ export class ConductorRemittancesPage implements OnInit {
           trip_ids: trips.map((t) => t.id),
           expenses: this.buildExpensesPayload(),
           manual_trips,
-          expense_ids: this.includedLoggedExpenses().map((e) => e.id),
         },
         { withCredentials: true },
       )
@@ -819,7 +788,6 @@ export class ConductorRemittancesPage implements OnInit {
           this.allTrips.set([]);
           this.selectedTripIds.set(new Set());
           this.manualEntries.set({});
-          this.loggedExpenses.set([]);
           this.loadRemittances();
           this.activeTab.set('list');
         },

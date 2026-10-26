@@ -10,7 +10,6 @@ const {
   Ticket,
   Remittance,
   RemittanceExpense,
-  TripExpense,
   sequelize,
 } = require("../models");
 const EXPENSE_TYPES = require("../models/expenseTypes");
@@ -189,8 +188,6 @@ const getAssignedTrips = async (req, res) => {
             "origin",
             "destination",
             "distance_km",
-            "minimum_fare",
-            "rate_per_km",
           ],
         },
         {
@@ -642,119 +639,6 @@ const getTickets = async (req, res) => {
   }
 };
 
-// YYYY-MM-DD in server-local time (matches how trip dates are bucketed elsewhere).
-const toLocalDateString = (d) => {
-  const date = new Date(d);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-};
-
-const expenseIncludes = [
-  {
-    model: Trip,
-    attributes: ["id", "trip_number", "departure_time"],
-    include: [{ model: Route, attributes: ["origin", "destination"] }],
-  },
-  { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
-];
-
-// POST /api/conductor/expenses
-// Log one expense as it happens. Body: { trip_id, expense_type, amount, ticket_number?, notes? }.
-// Bus and date come from the trip, so the entry can later be matched to that day's remittance.
-const createExpense = async (req, res) => {
-  try {
-    const conductorId = req.user.id;
-    const { trip_id, expense_type, amount, ticket_number, notes } = req.body;
-
-    if (!EXPENSE_TYPES.includes(expense_type)) {
-      return res.status(400).json({ message: "Select a valid expense type." });
-    }
-    const value = Number(amount);
-    if (!(value > 0)) {
-      return res.status(400).json({ message: "Amount must be greater than 0." });
-    }
-    if (!trip_id) {
-      return res.status(400).json({ message: "Select the trip this expense belongs to." });
-    }
-
-    const trip = await Trip.findOne({ where: { id: trip_id, conductor_id: conductorId } });
-    if (!trip) {
-      return res.status(404).json({ message: "Trip not found or not assigned to you." });
-    }
-
-    const ticketRef = ticket_number != null && String(ticket_number).trim() !== ""
-      ? String(ticket_number).trim().replace(/^#/, "")
-      : null;
-    if (ticketRef) {
-      const ticket = await Ticket.findOne({ where: { trip_id: trip.id, ticket_number: ticketRef } });
-      if (!ticket) {
-        return res.status(400).json({
-          message: `Ticket #${ticketRef} was not issued on trip #${trip.trip_number}.`,
-        });
-      }
-    }
-
-    const expense = await TripExpense.create({
-      conductor_id: conductorId,
-      trip_id: trip.id,
-      bus_id: trip.bus_id,
-      date: toLocalDateString(trip.departure_time),
-      expense_type,
-      amount: value,
-      ticket_number: ticketRef,
-      notes: notes?.trim() || null,
-    });
-
-    const created = await TripExpense.findByPk(expense.id, { include: expenseIncludes });
-    return res.status(201).json(created);
-  } catch (error) {
-    console.error("Error creating expense:", error);
-    return res.status(500).json({ message: "Internal server error." });
-  }
-};
-
-// GET /api/conductor/expenses?date=YYYY-MM-DD&busId=&tripId=&unremitted=1
-const getExpenses = async (req, res) => {
-  try {
-    const { date, busId, tripId, unremitted } = req.query;
-    const where = { conductor_id: req.user.id };
-    if (date) where.date = date;
-    if (busId) where.bus_id = busId;
-    if (tripId) where.trip_id = tripId;
-    if (unremitted === "1" || unremitted === "true") where.remittance_id = null;
-
-    const expenses = await TripExpense.findAll({
-      where,
-      include: expenseIncludes,
-      order: [["created_at", "DESC"]],
-    });
-    return res.json(expenses);
-  } catch (error) {
-    console.error("Error fetching expenses:", error);
-    return res.status(500).json({ message: "Internal server error." });
-  }
-};
-
-// DELETE /api/conductor/expenses/:id — only while it hasn't been remitted yet.
-const deleteExpense = async (req, res) => {
-  try {
-    const expense = await TripExpense.findOne({
-      where: { id: req.params.id, conductor_id: req.user.id },
-    });
-    if (!expense) return res.status(404).json({ message: "Expense not found." });
-    if (expense.remittance_id) {
-      return res
-        .status(400)
-        .json({ message: "This expense is already part of a submitted remittance." });
-    }
-    await expense.destroy();
-    return res.status(204).send();
-  } catch (error) {
-    console.error("Error deleting expense:", error);
-    return res.status(500).json({ message: "Internal server error." });
-  }
-};
-
 // Applies manually encoded results to trips that were run without the ticketing
 // terminal: sets the collection as the trip total, replaces its passenger counts and
 // marks it completed. Returns an error message for the client, or null on success.
@@ -831,7 +715,6 @@ const submitRemittance = async (req, res) => {
       trip_ids, // array of trip IDs completed
       expenses = [], // array of { expense_type, amount }
       manual_trips = [],
-      expense_ids = [],
       driver_commission = 0,
       conductor_commission = 0,
       bonus_allowance = 0,
@@ -965,21 +848,6 @@ const submitRemittance = async (req, res) => {
           amount: exp.amount,
         },
         { transaction },
-      );
-    }
-
-    // Mark the logged expenses this remittance covers so they aren't pre-filled again.
-    if (Array.isArray(expense_ids) && expense_ids.length > 0) {
-      await TripExpense.update(
-        { remittance_id: remittance.id },
-        {
-          where: {
-            id: { [Op.in]: expense_ids },
-            conductor_id: conductorId,
-            remittance_id: null,
-          },
-          transaction,
-        },
       );
     }
 
@@ -1230,7 +1098,4 @@ module.exports = {
   resubmitRemittance,
   getRemittances,
   getRemittanceById,
-  createExpense,
-  getExpenses,
-  deleteExpense,
 };

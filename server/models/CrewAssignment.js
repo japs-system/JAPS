@@ -1,8 +1,8 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  const BusCrewHistory = sequelize.define(
-    'BusCrewHistory',
+  const CrewAssignment = sequelize.define(
+    'CrewAssignment',
     {
       id: {
         type: DataTypes.INTEGER,
@@ -12,7 +12,7 @@ module.exports = (sequelize) => {
       bus_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
-        references: { model: 'buses', key: 'id' },
+        references: { model: 'bus_info', key: 'id' },
       },
       driver_id: {
         type: DataTypes.INTEGER,
@@ -35,11 +35,11 @@ module.exports = (sequelize) => {
       },
     },
     {
-      tableName: 'bus_crew_history',
+      tableName: 'crew_assignment',
       timestamps: false,
       underscored: true,
     }
   );
 
-  return BusCrewHistory;
+  return CrewAssignment;
 };

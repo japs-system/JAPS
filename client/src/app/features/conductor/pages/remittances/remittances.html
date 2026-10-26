@@ -478,17 +478,6 @@
               <h3 class="font-bold text-gray-800 text-sm mb-4 flex items-center gap-2">
                 <i class="pi pi-wallet text-blue-500"></i>Trip Expenses
               </h3>
-              @if (includedLoggedExpenses().length > 0) {
-                <p
-                  class="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-4"
-                >
-                  <i class="pi pi-info-circle text-[11px]"></i>
-                  Pre-filled from {{ includedLoggedExpenses().length }} logged
-                  {{ includedLoggedExpenses().length === 1 ? 'expense' : 'expenses' }}
-                  ({{ includedLoggedTotal() | currency: 'PHP' }}) on the selected trips. You can
-                  still adjust any amount.
-                </p>
-              }
               <form [formGroup]="remittanceForm">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                   @for (

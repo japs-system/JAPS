@@ -1,18 +1,16 @@
 const sequelize = require("../config/database");
 
 const User = require("./UserModel")(sequelize);
-const BusModel = require("./BusModel")(sequelize);
-const BusCrewHistory = require("./BusCrewHistoryModel")(sequelize);
+const BusModel = require("./BusInfo")(sequelize);
+const BusCrewHistory = require("./CrewAssignment")(sequelize);
 const Route = require("./RouteModel")(sequelize);
 const RouteStop = require("./RouteStopModel")(sequelize);
 const Trip = require("./TripModel")(sequelize);
-const FareRate = require("./FareRateModel")(sequelize);
 const FareSettings = require("./FareSettingsModel")(sequelize);
 const PassengerCount = require("./PassengerCountModel")(sequelize);
 const Ticket = require("./TicketModel")(sequelize);
 const Remittance = require("./RemittanceModel")(sequelize);
 const RemittanceExpense = require("./RemittanceExpenseModel")(sequelize);
-const TripExpense = require("./TripExpenseModel")(sequelize);
 const Notification = require("./NotificationModel")(sequelize);
 
 // ── User ───────────────────────────────────────────────────────────────────
@@ -47,7 +45,6 @@ BusCrewHistory.belongsTo(User, { foreignKey: "conductor_id", as: "conductor" });
 
 // ── Route ──────────────────────────────────────────────────────────────────
 Route.hasMany(Trip, { foreignKey: "route_id" });
-Route.hasMany(FareRate, { foreignKey: "route_id" });
 Route.hasMany(RouteStop, { foreignKey: "route_id", as: "stops" });
 
 // ── RouteStop ─────────────────────────────────────────────────────────────
@@ -61,10 +58,6 @@ Trip.belongsTo(User, { foreignKey: "conductor_id", as: "conductor" });
 Trip.belongsTo(Remittance, { foreignKey: "remittance_id" });
 Trip.hasMany(PassengerCount, { foreignKey: "trip_id" });
 Trip.hasMany(Ticket, { foreignKey: "trip_id" });
-Trip.hasMany(TripExpense, { foreignKey: "trip_id" });
-
-// ── FareRate ───────────────────────────────────────────────────────────────
-FareRate.belongsTo(Route, { foreignKey: "route_id" });
 
 // ── PassengerCount ─────────────────────────────────────────────────────────
 PassengerCount.belongsTo(Trip, { foreignKey: "trip_id" });
@@ -83,12 +76,6 @@ Remittance.hasMany(RemittanceExpense, { foreignKey: "remittance_id" });
 // ── RemittanceExpense ──────────────────────────────────────────────────────
 RemittanceExpense.belongsTo(Remittance, { foreignKey: "remittance_id" });
 
-// ── TripExpense (conductor's expense log) ───────────────────────────────────
-TripExpense.belongsTo(Trip, { foreignKey: "trip_id" });
-TripExpense.belongsTo(BusModel, { foreignKey: "bus_id" });
-TripExpense.belongsTo(User, { foreignKey: "conductor_id", as: "conductor" });
-TripExpense.belongsTo(Remittance, { foreignKey: "remittance_id" });
-Remittance.hasMany(TripExpense, { foreignKey: "remittance_id" });
 // ── Notifications ───────────────────────────────────────────────────────────
 Notification.belongsTo(User, { foreignKey: "user_id" });
 
@@ -100,12 +87,10 @@ module.exports = {
   Route,
   RouteStop,
   Trip,
-  FareRate,
   FareSettings,
   PassengerCount,
   Ticket,
   Remittance,
   RemittanceExpense,
-  TripExpense,
   Notification,
 };

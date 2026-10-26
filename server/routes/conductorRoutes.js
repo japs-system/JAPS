@@ -31,8 +31,5 @@ router.get("/remittances", getRemittances);
 router.get("/remittances/:id", getRemittanceById);
 router.post("/remittances", submitRemittance);
 router.put("/remittances/:id", resubmitRemittance);
-router.get("/expenses", getExpenses);
-router.post("/expenses", createExpense);
-router.delete("/expenses/:id", deleteExpense);
 
 module.exports = router;
