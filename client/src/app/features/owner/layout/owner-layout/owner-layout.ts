@@ -57,7 +57,6 @@ export class OwnerLayout {
   }
 
   roleLabel(): string {
-    if (this.user?.role === 'secretary') return 'Secretary';
     if (this.user?.role === 'admin_staff') return 'Admin Staff';
     return 'Owner';
   }
