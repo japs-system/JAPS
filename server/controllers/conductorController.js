@@ -1,7 +1,7 @@
 const { Op } = require("sequelize");
 const {
   Trip,
-  BusModel,
+  BusInfo,
   Route,
   RouteStop,
   FareSettings,
@@ -37,7 +37,7 @@ const notifyConductorOfSubmission = (remittance, isResubmission) =>
   notify(
     (async () => {
       const [bus, conductor] = await Promise.all([
-        BusModel.findByPk(remittance.bus_id),
+        BusInfo.findByPk(remittance.bus_id),
         User.findByPk(remittance.conductor_id),
       ]);
       if (!conductor?.email) return;
@@ -69,7 +69,7 @@ const notifyOwnersOfTrip = (trip, status, conductorId) =>
       const [full, conductor] = await Promise.all([
         Trip.findByPk(trip.id, {
           include: [
-            { model: BusModel, attributes: ["bus_number"] },
+            { model: BusInfo, attributes: ["bus_number"] },
             { model: Route, attributes: ["origin", "destination"] },
           ],
         }),
@@ -77,7 +77,7 @@ const notifyOwnersOfTrip = (trip, status, conductorId) =>
       ]);
 
       const route = full?.Route ? `${full.Route.origin} → ${full.Route.destination}` : "";
-      const bus = full?.BusModel?.bus_number ?? trip.bus_id;
+      const bus = full?.BusInfo?.bus_number ?? trip.bus_id;
 
       let extra = "";
       if (status === "ongoing" && trip.actual_departure_time && trip.departure_time) {
@@ -102,7 +102,7 @@ const notifyReviewersOfSubmission = (remittance, isResubmission) =>
   notify(
     (async () => {
       const [bus, conductor] = await Promise.all([
-        BusModel.findByPk(remittance.bus_id),
+        BusInfo.findByPk(remittance.bus_id),
         User.findByPk(remittance.conductor_id),
       ]);
       const payload = {
@@ -155,7 +155,7 @@ const getAssignedTrips = async (req, res) => {
           },
         },
         include: [
-          { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
+          { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
           { model: Route, attributes: ["id", "origin", "destination"] },
           {
             model: User,
@@ -178,7 +178,7 @@ const getAssignedTrips = async (req, res) => {
       where: { conductor_id: conductorId },
       include: [
         {
-          model: BusModel,
+          model: BusInfo,
           attributes: ["id", "bus_number", "plate_number", "capacity"],
         },
         {
@@ -609,7 +609,7 @@ const getTickets = async (req, res) => {
           where: { conductor_id: conductorId },
           include: [
             {
-              model: BusModel,
+              model: BusInfo,
               attributes: ["id", "bus_number", "plate_number"],
             },
             {
@@ -858,7 +858,7 @@ const submitRemittance = async (req, res) => {
     notify(
       (async () => {
         const [bus, conductor, reviewers] = await Promise.all([
-          BusModel.findByPk(bus_id),
+          BusInfo.findByPk(bus_id),
           User.findByPk(conductorId),
           User.findAll({ where: { role: ["owner", "admin_staff", "audit_teller"], is_active: true } }),
         ]);
@@ -987,7 +987,7 @@ const resubmitRemittance = async (req, res) => {
     notify(
       (async () => {
         const [bus, conductor, reviewers] = await Promise.all([
-          BusModel.findByPk(remittance.bus_id),
+          BusInfo.findByPk(remittance.bus_id),
           User.findByPk(conductorId),
           User.findAll({ where: { role: ["owner", "admin_staff", "audit_teller"], is_active: true } }),
         ]);
@@ -1029,7 +1029,7 @@ const getRemittances = async (req, res) => {
     const remittances = await Remittance.findAll({
       where: { conductor_id: conductorId },
       include: [
-        { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
+        { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
         {
           model: User,
           as: "driver",

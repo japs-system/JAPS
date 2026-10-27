@@ -1,4 +1,4 @@
-const { Trip, BusModel, Route, User, Remittance, RemittanceExpense } = require('../models');
+const { Trip, BusInfo, Route, User, Remittance, RemittanceExpense } = require('../models');
 const { findRemittanceDetail } = require('../services/remittance/findRemittanceDetail');
 
 // GET /api/driver/trips
@@ -9,7 +9,7 @@ const getAssignedTrips = async (req, res) => {
     const trips = await Trip.findAll({
       where: { driver_id: driverId },
       include: [
-        { model: BusModel, attributes: ['id', 'bus_number', 'plate_number', 'capacity'] },
+        { model: BusInfo, attributes: ['id', 'bus_number', 'plate_number', 'capacity'] },
         { model: Route, attributes: ['id', 'origin', 'destination', 'distance_km'] },
         { model: User, as: 'conductor', attributes: ['id', 'first_name', 'last_name', 'employee_id', 'contact_number'] },
       ],
@@ -31,7 +31,7 @@ const getRemittances = async (req, res) => {
     const remittances = await Remittance.findAll({
       where: { driver_id: driverId },
       include: [
-        { model: BusModel, attributes: ['id', 'bus_number', 'plate_number'] },
+        { model: BusInfo, attributes: ['id', 'bus_number', 'plate_number'] },
         {
           model: User,
           as: 'driver',
