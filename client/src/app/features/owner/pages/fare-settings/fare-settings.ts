@@ -1,7 +1,13 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { NumericInput } from '../../../../shared/directives/numeric-input.directive';
 import { HttpClient } from '@angular/common/http';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  FormBuilder,
+  FormGroup,
+  ReactiveFormsModule,
+  ValidatorFn,
+  Validators,
+} from '@angular/forms';
 import { AlertService } from '../../../../core/services/alert.service';
 import { environment } from '../../../../../environments/environment';
 
@@ -14,9 +20,24 @@ interface FareSettingsData {
   student_discount_percent: number;
   senior_citizen_discount_percent: number;
   pwd_discount_percent: number;
-  discounted_discount_percent: number;
   effective_date: string;
 }
+
+/** Fare configuration: up to 4 whole digits and 2 decimals (0 – 9999.99). */
+const MONEY_VALIDATORS: ValidatorFn[] = [
+  Validators.required,
+  Validators.min(0),
+  Validators.max(9999.99),
+  Validators.pattern(/^\d{1,4}(\.\d{1,2})?$/),
+];
+
+/** Category discounts: up to 3 whole digits and 2 decimals, never above 100%. */
+const PERCENT_VALIDATORS: ValidatorFn[] = [
+  Validators.required,
+  Validators.min(0),
+  Validators.max(100),
+  Validators.pattern(/^\d{1,3}(\.\d{1,2})?$/),
+];
 
 @Component({
   selector: 'app-fare-settings',
@@ -40,24 +61,16 @@ export class FareSettings implements OnInit {
     { key: 'student', label: 'Student', hint: 'Typically 20%' },
     { key: 'senior_citizen', label: 'Senior Citizen', hint: '20% required by law' },
     { key: 'pwd', label: 'PWD', hint: '20% required by law' },
-    { key: 'discounted', label: 'Discounted', hint: 'Promotional rate' },
   ];
 
   form: FormGroup = this.fb.group({
-    minimum_fare: [50.0, [Validators.required, Validators.min(0)]],
-    base_distance_km: [5.0, [Validators.required, Validators.min(0)]],
-    rate_per_km: [2.0, [Validators.required, Validators.min(0)]],
-    regular_discount_percent: [0, [Validators.required, Validators.min(0), Validators.max(100)]],
-    student_discount_percent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
-    senior_citizen_discount_percent: [
-      20,
-      [Validators.required, Validators.min(0), Validators.max(100)],
-    ],
-    pwd_discount_percent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
-    discounted_discount_percent: [
-      20,
-      [Validators.required, Validators.min(0), Validators.max(100)],
-    ],
+    minimum_fare: [50.0, MONEY_VALIDATORS],
+    base_distance_km: [5.0, MONEY_VALIDATORS],
+    rate_per_km: [2.0, MONEY_VALIDATORS],
+    regular_discount_percent: [0, PERCENT_VALIDATORS],
+    student_discount_percent: [20, PERCENT_VALIDATORS],
+    senior_citizen_discount_percent: [20, PERCENT_VALIDATORS],
+    pwd_discount_percent: [20, PERCENT_VALIDATORS],
     effective_date: [new Date().toISOString().slice(0, 10), Validators.required],
   });
 
@@ -70,7 +83,18 @@ export class FareSettings implements OnInit {
     this.http.get<FareSettingsData>(this.API, { withCredentials: true }).subscribe({
       next: (data) => {
         this.settings.set(data);
-        this.form.patchValue(data);
+        // The API returns decimals as strings (e.g. "2.7100"); convert them to numbers so
+        // they satisfy the 2-decimal validators.
+        this.form.patchValue({
+          minimum_fare: Number(data.minimum_fare),
+          base_distance_km: Number(data.base_distance_km),
+          rate_per_km: Number(data.rate_per_km),
+          regular_discount_percent: Number(data.regular_discount_percent),
+          student_discount_percent: Number(data.student_discount_percent),
+          senior_citizen_discount_percent: Number(data.senior_citizen_discount_percent),
+          pwd_discount_percent: Number(data.pwd_discount_percent),
+          effective_date: data.effective_date,
+        });
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -103,21 +127,28 @@ export class FareSettings implements OnInit {
     return !!(c?.invalid && c?.touched);
   }
 
+  /** Message shown under a field that failed validation. */
+  fieldMessage(field: string): string {
+    const c = this.form.get(field);
+    if (c?.errors?.['required']) return 'Required';
+    return field.endsWith('_discount_percent')
+      ? '0 to 100, up to 2 decimals'
+      : 'Up to 9999.99, up to 2 decimals';
+  }
+
   previewFare(distance: number): Record<string, number> {
     const v = this.form.value;
     const minFare = parseFloat(v.minimum_fare) || 0;
     const baseDistanceKm = parseFloat(v.base_distance_km) || 0;
     const ratePerKm = parseFloat(v.rate_per_km) || 0;
-    // If distance <= base_distance_km, use min_fare. Otherwise add per-km rate.
-    const baseFare =
-      distance <= baseDistanceKm ? minFare : minFare + (distance - baseDistanceKm) * ratePerKm;
+    // Within the base distance the minimum fare applies; beyond it, distance × rate per km.
+    const baseFare = distance <= baseDistanceKm ? minFare : distance * ratePerKm;
 
     return {
       regular: baseFare * (1 - (parseFloat(v.regular_discount_percent) || 0) / 100),
       student: baseFare * (1 - (parseFloat(v.student_discount_percent) || 0) / 100),
       senior_citizen: baseFare * (1 - (parseFloat(v.senior_citizen_discount_percent) || 0) / 100),
       pwd: baseFare * (1 - (parseFloat(v.pwd_discount_percent) || 0) / 100),
-      discounted: baseFare * (1 - (parseFloat(v.discounted_discount_percent) || 0) / 100),
     };
   }
 }

@@ -82,8 +82,10 @@ Notification.belongsTo(User, { foreignKey: "user_id" });
 module.exports = {
   sequelize,
   User,
-  BusModel,
+  // Both the old and the new names are exported, so controllers can import either one.
   BusInfo: BusModel,
+  BusModel,
+  CrewAssignment: BusCrewHistory,
   BusCrewHistory,
   Route,
   RouteStop,

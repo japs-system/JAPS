@@ -41,7 +41,6 @@ describe('TicketingPage', () => {
       student_discount_percent: 20,
       senior_citizen_discount_percent: 20,
       pwd_discount_percent: 20,
-      discounted_discount_percent: 20,
     });
     httpMock.expectOne(`${environment.apiUrl}/api/conductor/trips`).flush([]);
     await fixture.whenStable();
@@ -67,12 +66,12 @@ describe('TicketingPage', () => {
     component.ticketForm.patchValue({
       boarding_km: 0,
       dropping_km: 5,
-      quantities: { regular: 1, student: 1, senior_citizen: 1, pwd: 0, discounted: 0 },
+      quantities: { regular: 1, student: 1, senior_citizen: 1, pwd: 0 },
     });
 
-    // 5 km with a 4 km base: 10 + 1 × 2 = ₱12 regular, ₱9.60 with a 20% discount.
+    // 5 km is past the 4 km base distance: 5 × 2 = ₱10 regular, ₱8 with a 20% discount.
     expect(component.totalPassengers()).toBe(3);
-    expect(component.totalFare()).toBe(31.2);
+    expect(component.totalFare()).toBe(26);
 
     component.printTicketSubmit();
 
@@ -92,12 +91,12 @@ describe('TicketingPage', () => {
         boarding_point: 'Manila',
         dropping_point: 'Baguio',
         distance_km: 5,
-        fare: 31.2,
+        fare: 26,
         passenger_count: 3,
         passengers: [
-          { category: 'regular', quantity: 1, unit_fare: 12, subtotal: 12 },
-          { category: 'student', quantity: 1, unit_fare: 9.6, subtotal: 9.6 },
-          { category: 'senior_citizen', quantity: 1, unit_fare: 9.6, subtotal: 9.6 },
+          { category: 'regular', quantity: 1, unit_fare: 10, subtotal: 10 },
+          { category: 'student', quantity: 1, unit_fare: 8, subtotal: 8 },
+          { category: 'senior_citizen', quantity: 1, unit_fare: 8, subtotal: 8 },
         ],
       },
     });

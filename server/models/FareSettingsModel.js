@@ -40,11 +40,6 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: 20,
       },
-      discounted_discount_percent: {
-        type: DataTypes.DECIMAL(6, 2),
-        allowNull: false,
-        defaultValue: 20,
-      },
       effective_date: { type: DataTypes.DATEONLY, allowNull: false },
     },
     {
