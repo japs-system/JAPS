@@ -262,7 +262,7 @@
       <div class="bg-white rounded-2xl p-5 shadow-md border border-gray-100">
         <h4 class="font-bold text-gray-800 text-sm mb-3">Passenger Breakdown</h4>
         <div class="divide-y divide-gray-100">
-          @for (cat of ['regular', 'student', 'senior_citizen', 'pwd', 'discounted']; track cat) {
+          @for (cat of CATEGORIES; track cat) {
             <div class="py-2.5 flex items-center justify-between text-xs">
               <span class="font-bold text-gray-700 capitalize">{{ getCategoryLabel(cat) }}</span>
               <div class="flex items-center gap-3">

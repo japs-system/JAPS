@@ -39,7 +39,6 @@ export interface FareSettings {
   student_discount_percent: number;
   senior_citizen_discount_percent: number;
   pwd_discount_percent: number;
-  discounted_discount_percent: number;
 }
 
 export interface PassengerCount {
@@ -53,13 +52,7 @@ export interface RouteStopPoint {
   km_from_origin: number;
 }
 
-export const PASSENGER_CATEGORIES = [
-  'regular',
-  'student',
-  'senior_citizen',
-  'pwd',
-  'discounted',
-] as const;
+export const PASSENGER_CATEGORIES = ['regular', 'student', 'senior_citizen', 'pwd'] as const;
 export type PassengerCategory = (typeof PASSENGER_CATEGORIES)[number];
 
 /** Default passenger mix for a new ticket: one regular passenger. */
@@ -68,7 +61,6 @@ const DEFAULT_QUANTITIES: Record<PassengerCategory, number> = {
   student: 0,
   senior_citizen: 0,
   pwd: 0,
-  discounted: 0,
 };
 
 @Component({
@@ -113,7 +105,8 @@ export class TicketingPage implements OnInit {
     const minFare = Number(settings.minimum_fare);
     const baseDistanceKm = Number(settings.base_distance_km);
     const ratePerKm = Number(settings.rate_per_km);
-    return distance <= baseDistanceKm ? minFare : minFare + (distance - baseDistanceKm) * ratePerKm;
+    // Within the base distance the minimum fare applies; beyond it, distance × rate per km.
+    return distance <= baseDistanceKm ? minFare : distance * ratePerKm;
   });
 
   /** Per-category lines for the passengers currently encoded (quantity > 0 only).
@@ -370,8 +363,6 @@ export class TicketingPage implements OnInit {
         return Number(settings.senior_citizen_discount_percent);
       case 'pwd':
         return Number(settings.pwd_discount_percent);
-      case 'discounted':
-        return Number(settings.discounted_discount_percent);
       default:
         return 0;
     }
@@ -383,7 +374,6 @@ export class TicketingPage implements OnInit {
       student: 'Student',
       senior_citizen: 'Senior Citizen',
       pwd: 'PWD',
-      discounted: 'Discounted',
     };
     return labels[cat] ?? cat;
   }
