@@ -1,4 +1,3 @@
-const path = require("path");
 const nodemailer = require("nodemailer");
 
 const transporter = nodemailer.createTransport({
@@ -10,17 +9,12 @@ const transporter = nodemailer.createTransport({
 });
 
 const BRAND_BLUE = "#1E5AAA";
-const LOGO_PATH = path.join(
-	__dirname,
-	"..",
-	"..",
-	"client",
-	"public",
-	"assets",
-	"images",
-	"JAPS (white).png",
-);
-const LOGO_ATTACHMENT = { filename: "japs-logo.png", path: LOGO_PATH, cid: "japslogo" };
+// The logo is loaded from the website, not attached to every email — the Gmail
+// phone app often fails to show embedded (cid) images and lists them as attachments.
+// The file is client/public/assets/images/JAPS (white).png — its name is URL-encoded below
+// (space = %20, brackets = %28 %29) because a web address can't contain them as-is.
+const SITE_URL = () => process.env.CLIENT_URL || "http://localhost:2736";
+const LOGO_URL = () => `${SITE_URL()}/assets/images/JAPS%20%28white%29.png`;
 const LOGIN_URL = () => process.env.CLIENT_URL || "http://localhost:2736";
 
 const peso = (n) => `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
@@ -36,7 +30,7 @@ const renderEmail = ({ heading, intro, tableRows, note, ctaLabel, ctaUrl }) => `
 	<div style="background-color:#f3f4f6;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;">
 		<div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
 			<div style="background-color:${BRAND_BLUE};padding:24px;text-align:center;">
-				<img src="cid:japslogo" alt="JAPS" style="height:32px;" />
+				<img src="${LOGO_URL()}" alt="JAPS" height="32" style="height:32px;width:auto;border:0;outline:none;" />
 			</div>
 			<div style="padding:32px;">
 				<h1 style="font-size:20px;font-weight:700;color:#111827;margin:0 0 8px;">${heading}</h1>
@@ -59,7 +53,6 @@ const send = (to, subject, html) =>
 		to,
 		subject,
 		html,
-		attachments: [LOGO_ATTACHMENT],
 	});
 
 const fullName = (u) => [u.first_name, u.last_name].filter(Boolean).join(" ");

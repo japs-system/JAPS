@@ -3,7 +3,7 @@ const { Sequelize } = require("sequelize");
 const { User } = require("../models");
 const { sendAccountCredentialsEmail } = require("../config/mailer");
 
-const ALLOWED_ROLES = ["secretary", "admin_staff", "audit_teller", "conductor", "driver"];
+const ALLOWED_ROLES = [ "admin_staff", "audit_teller", "conductor", "driver"];
 
 // GET /api/users
 const getUsers = async (req, res) => {
