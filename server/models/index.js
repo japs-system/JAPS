@@ -83,6 +83,7 @@ module.exports = {
   sequelize,
   User,
   BusModel,
+  BusInfo: BusModel,
   BusCrewHistory,
   Route,
   RouteStop,
