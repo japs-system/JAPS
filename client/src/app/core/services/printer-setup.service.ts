@@ -17,6 +17,19 @@ const GS = 0x1d;
 // 58mm thermal paper prints at 384 dots wide.
 const PRINTER_WIDTH_DOTS = 384;
 
+/** Plain, already-formatted values for one ticket receipt. */
+export interface ReceiptData {
+  dateText: string;
+  ticketNumber: string | number;
+  busNumber: string;
+  plateNumber: string;
+  from: string;
+  to: string;
+  lines: { label: string; quantity: number; amount: string }[];
+  passengerCount: number;
+  total: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PrinterSetupService {
   private _configured = signal<boolean>(localStorage.getItem(STORAGE_KEY) === 'true');
@@ -108,16 +121,33 @@ export class PrinterSetupService {
     if (!this.characteristic) {
       throw new Error('Printer not connected.');
     }
-
     const canvas = await this.captureAtPrinterWidth(element);
-    const resized = this.resizeToWidth(canvas, PRINTER_WIDTH_DOTS);
-    const bitmap = this.toMonochromeBitmap(resized);
+    await this.printCanvas(this.resizeToWidth(canvas, PRINTER_WIDTH_DOTS));
+  }
+
+  /** Prints a ticket by drawing it straight onto a 384-dot-wide canvas (no screenshot of
+   *  the page), so the paper always matches the layout below: logo, date, ticket details,
+   *  fare lines, total, thank-you. Height is computed from the content, so no blank paper. */
+  async printReceipt(ticket: ReceiptData): Promise<void> {
+    if (!this.characteristic) {
+      throw new Error('Printer not connected.');
+    }
+    const canvas = await this.drawReceipt(ticket);
+    await this.printCanvas(canvas);
+  }
+
+  /** Sends a canvas that is already PRINTER_WIDTH_DOTS wide to the printer. */
+  private async printCanvas(canvas: HTMLCanvasElement): Promise<void> {
+    if (!this.characteristic) {
+      throw new Error('Printer not connected.');
+    }
+    const bitmap = this.toMonochromeBitmap(canvas);
 
     const payload = this.concatBuffers([
       new Uint8Array([ESC, 0x40]), // initialize
       new Uint8Array([ESC, 0x61, 0x01]), // center align
       this.buildRasterImageCommand(bitmap),
-      new Uint8Array([ESC, 0x64, 0x01]), // feed 1 line
+      new Uint8Array([ESC, 0x64, 0x03]), // feed 3 lines so the tear-off clears the text
     ]);
 
     const chunkSize = 180;
@@ -134,6 +164,160 @@ export class PrinterSetupService {
         await this.characteristic.writeValue(chunk);
       }
       await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  /** Draws the receipt on a canvas exactly PRINTER_WIDTH_DOTS wide. */
+  private async drawReceipt(t: ReceiptData): Promise<HTMLCanvasElement> {
+    const W = PRINTER_WIDTH_DOTS;
+    const PAD = 8;
+    const FONT = 'Poppins, Arial, sans-serif';
+    try {
+      await Promise.all([
+        document.fonts.load(`500 20px ${FONT}`),
+        document.fonts.load(`600 24px ${FONT}`),
+      ]);
+    } catch {
+      /* fall back to the default font */
+    }
+
+    const logo = await this.loadTrimmedLogo();
+    const logoH = 56;
+    const logoW = logo ? Math.round((logo.width / logo.height) * logoH) : 0;
+
+    // Pass 1 measures the height, pass 2 draws it. Same function, so they never disagree.
+    const render = (ctx: CanvasRenderingContext2D | null): number => {
+      let y = 8;
+      const text = (
+        left: string,
+        right: string | null,
+        size: number,
+        weight = 500,
+        align: 'lr' | 'center' = 'lr',
+      ) => {
+        const lineH = Math.round(size * 1.45);
+        if (ctx) {
+          ctx.font = `${weight} ${size}px ${FONT}`;
+          ctx.fillStyle = '#000';
+          ctx.textBaseline = 'middle';
+          if (align === 'center') {
+            ctx.textAlign = 'center';
+            ctx.fillText(left, W / 2, y + lineH / 2);
+          } else {
+            ctx.textAlign = 'left';
+            ctx.fillText(left, PAD, y + lineH / 2);
+            if (right !== null) {
+              ctx.textAlign = 'right';
+              ctx.fillText(right, W - PAD, y + lineH / 2);
+            }
+          }
+        }
+        y += lineH;
+      };
+      const rule = (dashed: boolean, width = 2) => {
+        y += 6;
+        if (ctx) {
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = width;
+          ctx.setLineDash(dashed ? [6, 4] : []);
+          ctx.beginPath();
+          ctx.moveTo(PAD, y);
+          ctx.lineTo(W - PAD, y);
+          ctx.stroke();
+        }
+        y += 8;
+      };
+
+      if (logo) {
+        if (ctx) ctx.drawImage(logo, (W - logoW) / 2, y, logoW, logoH);
+        y += logoH + 4;
+      } else {
+        text('JAPS', null, 32, 700, 'center');
+      }
+      text(t.dateText, null, 18, 500, 'center');
+      rule(true);
+
+      text('TICKET NO:', `#${t.ticketNumber}`, 24, 600);
+      text('BUS NO:', t.busNumber, 20);
+      text('PLATE NO:', t.plateNumber, 20);
+      text('FROM:', t.from, 20);
+      text('TO:', t.to, 20);
+      rule(true);
+
+      for (const line of t.lines) text(`${line.label} ×${line.quantity}`, line.amount, 20);
+      text('PASSENGERS:', String(t.passengerCount), 20);
+      rule(false);
+      text('TOTAL AMOUNT:', t.total, 24, 600);
+      rule(true);
+
+      text('Thank you for riding with us!', null, 18, 500, 'center');
+      text('PLEASE KEEP THIS TICKET', null, 14, 500, 'center');
+      y += 8;
+      return y;
+    };
+
+    const height = render(null);
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, height);
+    render(ctx);
+    return canvas;
+  }
+
+  /** Loads the black JAPS logo and crops away its transparent margins, because the source
+   *  PNG is a large canvas with the artwork in the middle. Returns null if it can't load,
+   *  so the receipt falls back to the text "JAPS" instead of failing to print. */
+  private async loadTrimmedLogo(): Promise<HTMLCanvasElement | null> {
+    try {
+      const img = new Image();
+      img.src = encodeURI('assets/images/JAPS (black).png');
+      await img.decode();
+
+      const probeW = 300;
+      const probeH = Math.round((img.naturalHeight / img.naturalWidth) * probeW);
+      const probe = document.createElement('canvas');
+      probe.width = probeW;
+      probe.height = probeH;
+      const pctx = probe.getContext('2d', { willReadFrequently: true })!;
+      pctx.drawImage(img, 0, 0, probeW, probeH);
+      const { data } = pctx.getImageData(0, 0, probeW, probeH);
+      let minX = probeW, minY = probeH, maxX = -1, maxY = -1;
+      for (let y = 0; y < probeH; y++) {
+        for (let x = 0; x < probeW; x++) {
+          if (data[(y * probeW + x) * 4 + 3] > 40) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX < 0) return null;
+
+      const scale = img.naturalWidth / probeW;
+      const sx = Math.max(0, Math.floor(minX * scale) - 4);
+      const sy = Math.max(0, Math.floor(minY * scale) - 4);
+      const sw = Math.min(img.naturalWidth - sx, Math.ceil((maxX - minX + 1) * scale) + 8);
+      const sh = Math.min(img.naturalHeight - sy, Math.ceil((maxY - minY + 1) * scale) + 8);
+
+      // Pre-shrink to the size it will be drawn at, over WHITE (not transparent), so the
+      // 1-bit conversion sees real black on white instead of transparent pixels.
+      const outH = 112;
+      const outW = Math.round((sw / sh) * outH);
+      const out = document.createElement('canvas');
+      out.width = outW;
+      out.height = outH;
+      const octx = out.getContext('2d')!;
+      octx.fillStyle = '#ffffff';
+      octx.fillRect(0, 0, outW, outH);
+      octx.imageSmoothingQuality = 'high';
+      octx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+      return out;
+    } catch {
+      return null;
     }
   }
 

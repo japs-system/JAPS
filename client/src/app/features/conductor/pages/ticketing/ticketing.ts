@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { AlertService } from '../../../../core/services/alert.service';
-import { PrinterSetupService } from '../../../../core/services/printer-setup.service';
+import { PrinterSetupService, ReceiptData } from '../../../../core/services/printer-setup.service';
 import { environment } from '../../../../../environments/environment';
 import { TicketPassengerLine } from '../../../../shared/models/ticket.models';
 
@@ -236,7 +236,8 @@ export class TicketingPage implements OnInit {
   }
 
   private unitFare(category: string, base: number): number {
-    return parseFloat((base * (1 - this.getDiscountPercent(category) / 100)).toFixed(2));
+    // Whole pesos: round the per-passenger fare to the nearest peso (matches the server).
+    return Math.round(base * (1 - this.getDiscountPercent(category) / 100));
   }
 
   quantity(category: string): number {
@@ -335,12 +336,30 @@ export class TicketingPage implements OnInit {
 
   /** Sends the receipt currently rendered in the modal to the thermal printer. */
   private sendReceiptToPrinter(): void {
-    const receiptEl = this.receiptContentRef()?.nativeElement;
-    if (!receiptEl) return;
+    const ticket = this.lastPrintedTicket();
+    if (!ticket) return;
+
+    const money = (n: unknown) =>
+      '₱' + Number(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const receipt: ReceiptData = {
+      dateText: new DatePipe('en-US').transform(ticket.date, 'medium') ?? '',
+      ticketNumber: ticket.ticketNumber,
+      busNumber: ticket.bus?.bus_number ?? '',
+      plateNumber: ticket.bus?.plate_number ?? '',
+      from: ticket.boardingPoint ?? '',
+      to: ticket.droppingPoint ?? '',
+      lines: (ticket.passengers ?? []).map((l: TicketPassengerLine) => ({
+        label: this.getCategoryLabel(l.category),
+        quantity: l.quantity,
+        amount: money(l.subtotal),
+      })),
+      passengerCount: ticket.passengerCount,
+      total: money(ticket.fare),
+    };
 
     this.isSendingToPrinter.set(true);
     this.printerSetup
-      .printTicketImage(receiptEl)
+      .printReceipt(receipt)
       .catch((err) => {
         this.alertService.error(
           'Printer Error',

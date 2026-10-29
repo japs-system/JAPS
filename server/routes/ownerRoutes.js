@@ -639,7 +639,6 @@ const EXPENSE_COLUMNS = [
   ["diesel", "Diesel / Fuel"],
   ["caller_grand_terminal", "Caller (Grand Terminal)"],
   ["caller_calamba_terminal", "Caller (Calamba Terminal)"],
-  ["pwd", "PWD / Senior Discount"],
   ["miscellaneous", "Miscellaneous"],
 ];
 

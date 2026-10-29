@@ -6,7 +6,6 @@ module.exports = [
   "toll_fees",
   "parking",
   "ppa",
-  "pwd",
   "washing",
   "diesel",
   "caller_grand_terminal",

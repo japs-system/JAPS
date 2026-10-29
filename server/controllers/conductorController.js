@@ -494,7 +494,7 @@ const printTicket = async (req, res) => {
 
     const passengers = group.map(({ category, quantity }) => {
       const discountPercent = getDiscountPercent(category, fareSettings);
-      const unitFare = parseFloat((baseFare * (1 - discountPercent / 100)).toFixed(2));
+      const unitFare = Math.round(baseFare * (1 - discountPercent / 100));
       return {
         category,
         quantity,
