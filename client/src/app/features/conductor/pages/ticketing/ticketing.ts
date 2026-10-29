@@ -63,6 +63,14 @@ const DEFAULT_QUANTITIES: Record<PassengerCategory, number> = {
   pwd: 0,
 };
 
+/** Passenger counts after a ticket is printed: everything back to 0. */
+const EMPTY_QUANTITIES: Record<PassengerCategory, number> = {
+  regular: 0,
+  student: 0,
+  senior_citizen: 0,
+  pwd: 0,
+};
+
 @Component({
   selector: 'app-ticketing',
   imports: [NumericInput, ReactiveFormsModule, CurrencyPipe, DatePipe, DecimalPipe],
@@ -297,8 +305,8 @@ export class TicketingPage implements OnInit {
           };
           this.lastPrintedTicket.set(printed);
           this.showPrintModal.set(true);
-          // Ready for the next group: the stops are kept, the passenger mix resets.
-          this.ticketForm.get('quantities')?.reset(DEFAULT_QUANTITIES);
+          // Ready for the next group: the stops are kept, every passenger count goes back to 0.
+          this.ticketForm.get('quantities')?.reset(EMPTY_QUANTITIES);
 
           // Wait for the modal (and its receipt content ref) to actually render.
           await this.waitForRender();
