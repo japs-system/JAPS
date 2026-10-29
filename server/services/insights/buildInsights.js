@@ -139,14 +139,6 @@ const tripPerformance = ({ tripsCompleted, tripsCancelled, avgDepartureDelayMin,
 
   let tone = "positive";
   let title = "Trips running to plan";
-  if (avgDepartureDelayMin != null && Number(tripsWithActualDeparture) > 0) {
-    const delay = Math.round(Number(avgDepartureDelayMin));
-    if (delay > 10) {
-      tone = "warning";
-      title = "Departures are running late";
-    }
-    parts.push(`average departure ${delay} min after schedule`);
-  }
   if (cancelRate >= 10) {
     tone = "warning";
     title = "High cancellation rate";

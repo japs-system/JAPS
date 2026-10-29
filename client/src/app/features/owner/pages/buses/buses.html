@@ -178,7 +178,7 @@
         <div class="flex-1 overflow-y-auto px-8 py-2 flex flex-col gap-4">
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Bus Number <span class="text-red-500">*</span></label>
-            <input formControlName="bus_number" type="text" placeholder="e.g. BUS-001"
+            <input formControlName="bus_number" type="text" placeholder="e.g. 8001"
               class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
               [class.border-red-400]="fieldError(form, 'bus_number')" />
             @if (fieldError(form, 'bus_number')) { <p class="text-red-500 text-xs mt-0.5">Required</p> }
@@ -192,7 +192,7 @@
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Capacity <span class="text-red-500">*</span></label>
-            <input formControlName="capacity" type="number" min="1" placeholder="e.g. 54"
+            <input formControlName="capacity" type="number" min="1" placeholder="e.g. 45"
               class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
               [class.border-red-400]="fieldError(form, 'capacity')" />
             @if (fieldError(form, 'capacity')) { <p class="text-red-500 text-xs mt-0.5">Must be at least 1</p> }

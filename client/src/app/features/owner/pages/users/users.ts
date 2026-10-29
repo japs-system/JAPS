@@ -97,7 +97,7 @@ export class Users implements OnInit {
   readonly ROLES = USER_ROLES;
   // Generated passwords are the employee's last name (client request), so this has to
   // allow short surnames like "Go" or "Uy".
-  readonly PASSWORD_MIN_LENGTH = 2;
+  readonly PASSWORD_MIN_LENGTH = 8;
 
   form: FormGroup = this.fb.group({
     employee_id: ['', Validators.required],
@@ -131,8 +131,8 @@ export class Users implements OnInit {
       const num = Number(m[2]);
       if (!best || num > best.num) best = { prefix: m[1], num, width: m[2].length };
     }
-    if (!best) return 'EMP-0001';
-    return `${best.prefix}${String(best.num + 1).padStart(best.width, '0')}`;
+    if (!best) return 'EMP-001';
+    return `${best.prefix}${String(best.num + 1).padStart(3, '0')}`;
   }
 
   /** Fills username (first initial + last name) and password (last name) from the name
@@ -146,12 +146,25 @@ export class Users implements OnInit {
     const first = letters(this.form.get('first_name')!.value);
     const last = letters(this.form.get('last_name')!.value);
 
+    // Username: LastnameFirstInitial@<employee number>, e.g. AgustinK@001.
+    const cap = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
+    const number = String(this.form.get('employee_id')!.value ?? '').match(/(\d+)$/)?.[1] ?? '001';
     const username = this.form.get('username')!;
     if (!username.dirty) {
-      username.setValue(last ? this.uniqueUsername(`${first.charAt(0)}${last}`) : '');
+      username.setValue(last ? `${cap(last)}${first.charAt(0).toUpperCase()}@${number}` : '');
     }
+    // Password: a generated three-word phrase + 2 digits, set once per new user.
     const password = this.form.get('password')!;
-    if (!password.dirty) password.setValue(last);
+    if (!password.dirty && !password.value) password.setValue(this.randomPassword());
+  }
+
+  /** Easy to remember, hard to guess, e.g. Mango-River-Bus47. */
+  private randomPassword(): string {
+    const words = ['Mango', 'River', 'Bus', 'Sunrise', 'Coconut', 'Island', 'Tricycle', 'Palm', 'Lake', 'Cloud', 'Maya', 'Bayan'];
+    const rand = () => crypto.getRandomValues(new Uint32Array(1))[0];
+    const pick = () => words[rand() % words.length];
+    const num = String(rand() % 100).padStart(2, '0');
+    return `${pick()}-${pick()}-${pick()}${num}`;
   }
 
   private uniqueUsername(base: string): string {

@@ -1,7 +1,7 @@
 const { Op } = require("sequelize");
 const {
   Trip,
-  BusInfo,
+  BusModel,
   Route,
   RouteStop,
   FareSettings,
@@ -37,7 +37,7 @@ const notifyConductorOfSubmission = (remittance, isResubmission) =>
   notify(
     (async () => {
       const [bus, conductor] = await Promise.all([
-        BusInfo.findByPk(remittance.bus_id),
+        BusModel.findByPk(remittance.bus_id),
         User.findByPk(remittance.conductor_id),
       ]);
       if (!conductor?.email) return;
@@ -66,25 +66,24 @@ const notifyOwnersOfTrip = (trip, status, conductorId) =>
       const event = TRIP_EVENTS[status];
       if (!event) return;
 
-      const [full, conductor] = await Promise.all([
-        Trip.findByPk(trip.id, {
-          include: [
-            { model: BusInfo, attributes: ["bus_number"] },
-            { model: Route, attributes: ["origin", "destination"] },
-          ],
-        }),
-        User.findByPk(conductorId),
-      ]);
+      const full = await Trip.findByPk(trip.id, {
+        include: [
+          { model: BusModel, attributes: ["bus_number"] },
+          { model: Route, attributes: ["origin", "destination"] },
+          { model: User, as: "driver", attributes: ["first_name", "last_name"] },
+          { model: User, as: "conductor", attributes: ["first_name", "last_name"] },
+        ],
+      });
+      const conductor = full?.conductor ?? (await User.findByPk(conductorId));
 
       const route = full?.Route ? `${full.Route.origin} → ${full.Route.destination}` : "";
-      const bus = full?.BusInfo?.bus_number ?? trip.bus_id;
+      const bus = full?.BusModel?.bus_number ?? trip.bus_id;
 
       let extra = "";
-      if (status === "ongoing" && trip.actual_departure_time && trip.departure_time) {
-        const late = Math.round(
-          (new Date(trip.actual_departure_time) - new Date(trip.departure_time)) / 60000,
-        );
-        if (late >= 15) extra = ` It left ${late} min late.`;
+      if (status === "ongoing") {
+        const driverName = full?.driver ? fullName(full.driver) : "—";
+        const conductorName = conductor ? fullName(conductor) : "—";
+        extra = ` Driver: ${driverName}. Conductor: ${conductorName}.`;
       }
       if (status === "completed") extra = ` Revenue ${peso(trip.grand_total)}.`;
 
@@ -102,7 +101,7 @@ const notifyReviewersOfSubmission = (remittance, isResubmission) =>
   notify(
     (async () => {
       const [bus, conductor] = await Promise.all([
-        BusInfo.findByPk(remittance.bus_id),
+        BusModel.findByPk(remittance.bus_id),
         User.findByPk(remittance.conductor_id),
       ]);
       const payload = {
@@ -155,7 +154,7 @@ const getAssignedTrips = async (req, res) => {
           },
         },
         include: [
-          { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
+          { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
           { model: Route, attributes: ["id", "origin", "destination"] },
           {
             model: User,
@@ -178,7 +177,7 @@ const getAssignedTrips = async (req, res) => {
       where: { conductor_id: conductorId },
       include: [
         {
-          model: BusInfo,
+          model: BusModel,
           attributes: ["id", "bus_number", "plate_number", "capacity"],
         },
         {
@@ -494,7 +493,7 @@ const printTicket = async (req, res) => {
 
     const passengers = group.map(({ category, quantity }) => {
       const discountPercent = getDiscountPercent(category, fareSettings);
-      const unitFare = Math.round(baseFare * (1 - discountPercent / 100));
+      const unitFare = parseFloat((baseFare * (1 - discountPercent / 100)).toFixed(2));
       return {
         category,
         quantity,
@@ -609,7 +608,7 @@ const getTickets = async (req, res) => {
           where: { conductor_id: conductorId },
           include: [
             {
-              model: BusInfo,
+              model: BusModel,
               attributes: ["id", "bus_number", "plate_number"],
             },
             {
@@ -858,7 +857,7 @@ const submitRemittance = async (req, res) => {
     notify(
       (async () => {
         const [bus, conductor, reviewers] = await Promise.all([
-          BusInfo.findByPk(bus_id),
+          BusModel.findByPk(bus_id),
           User.findByPk(conductorId),
           User.findAll({ where: { role: ["owner", "admin_staff", "audit_teller"], is_active: true } }),
         ]);
@@ -987,7 +986,7 @@ const resubmitRemittance = async (req, res) => {
     notify(
       (async () => {
         const [bus, conductor, reviewers] = await Promise.all([
-          BusInfo.findByPk(remittance.bus_id),
+          BusModel.findByPk(remittance.bus_id),
           User.findByPk(conductorId),
           User.findAll({ where: { role: ["owner", "admin_staff", "audit_teller"], is_active: true } }),
         ]);
@@ -1029,7 +1028,7 @@ const getRemittances = async (req, res) => {
     const remittances = await Remittance.findAll({
       where: { conductor_id: conductorId },
       include: [
-        { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
+        { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
         {
           model: User,
           as: "driver",
