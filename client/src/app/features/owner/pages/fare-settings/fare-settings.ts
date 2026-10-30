@@ -14,7 +14,6 @@ interface FareSettingsData {
   student_discount_percent: number;
   senior_citizen_discount_percent: number;
   pwd_discount_percent: number;
-  discounted_discount_percent: number;
   effective_date: string;
 }
 
@@ -36,11 +35,10 @@ export class FareSettings implements OnInit {
   previewDistance = signal(10);
 
   readonly CATEGORIES = [
-    { key: 'regular', label: 'Regular', hint: 'No discount' },
-    { key: 'student', label: 'Student', hint: 'Typically 20%' },
-    { key: 'senior_citizen', label: 'Senior Citizen', hint: '20% required by law' },
-    { key: 'pwd', label: 'PWD', hint: '20% required by law' },
-    { key: 'discounted', label: 'Discounted', hint: 'Promotional rate' },
+    { key: 'regular', label: 'Regular'},
+    { key: 'student', label: 'Student' },
+    { key: 'senior_citizen', label: 'Senior Citizen' },
+    { key: 'pwd', label: 'PWD' },
   ];
 
   form: FormGroup = this.fb.group({
@@ -54,10 +52,6 @@ export class FareSettings implements OnInit {
       [Validators.required, Validators.min(0), Validators.max(100)],
     ],
     pwd_discount_percent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
-    discounted_discount_percent: [
-      20,
-      [Validators.required, Validators.min(0), Validators.max(100)],
-    ],
     effective_date: [new Date().toISOString().slice(0, 10), Validators.required],
   });
 
@@ -129,7 +123,6 @@ export class FareSettings implements OnInit {
       student: fare(v.student_discount_percent),
       senior_citizen: fare(v.senior_citizen_discount_percent),
       pwd: fare(v.pwd_discount_percent),
-      discounted: fare(v.discounted_discount_percent),
     };
   }
 }

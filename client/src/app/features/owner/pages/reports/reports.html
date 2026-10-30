@@ -1,9 +1,6 @@
 <div class="space-y-6">
   <div>
-    <h1 class="text-2xl font-bold text-gray-800">Reports</h1>
-    <p class="text-sm text-gray-500">
-      Choose a date range and download the remittance report as an Excel file.
-    </p>
+    <h1 class="text-2xl text-gray-800">Reports</h1>
   </div>
 
   <!-- Date range -->
@@ -73,10 +70,6 @@
     <div class="bg-white rounded-xl border border-gray-200 p-5">
       <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
         <h2 class="text-base font-semibold text-gray-800">Preview</h2>
-        <p class="text-xs text-gray-500">
-          {{ s.remittances }} approved remittance{{ s.remittances === 1 ? '' : 's' }} ·
-          {{ s.pending }} pending · {{ s.rejected }} rejected (not counted)
-        </p>
       </div>
 
       <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">

@@ -118,10 +118,6 @@
                     <i class="pi pi-plus text-[10px]"></i> Add Stop
                   </button>
                 </div>
-                <p class="text-[10px] text-gray-400 mb-2">
-                  {{ route.origin }} = 0 km · {{ route.destination }} = {{ route.distance_km ?? '—' }} km ·
-                  every km value below is that stop's distance from {{ route.origin }}.
-                </p>
                 @if (loadingStops()) {
                   <p class="text-xs text-gray-400">Loading stops...</p>
                 } @else {
@@ -237,7 +233,7 @@
               type="number"
               min="0.01"
               step="0.01"
-              placeholder="e.g. 24.5"
+              placeholder="e.g. 25"
               class="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 border-gray-300"
               [class.border-red-400]="fieldError(form, 'distance_km')"
             />
@@ -322,8 +318,7 @@
                 <p class="text-red-500 text-xs mt-1.5">{{ pendingStopError() }}</p>
               }
               <p class="text-[10px] text-gray-400 mt-1.5">
-                Enter each stop's distance from the Origin above — not from the stop before it.
-                Changes to stopovers are saved together with the route.
+                Enter each stop's distance from the Origin above.
               </p>
           </div>
         </div>

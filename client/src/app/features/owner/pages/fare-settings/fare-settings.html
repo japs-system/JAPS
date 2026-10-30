@@ -1,9 +1,6 @@
 <!-- Page header -->
 <div class="mb-6">
   <h2 class="text-xl font-semibold text-gray-800">Fare Settings</h2>
-  <p class="text-sm text-gray-400 mt-0.5">
-    Configure global minimum fare, per-km rate, and category discounts
-  </p>
 </div>
 
 @if (loading()) {
@@ -59,7 +56,6 @@
               @if (fieldError('base_distance_km')) {
                 <p class="text-red-500 text-xs mt-0.5">{{ fieldMessage('base_distance_km') }}</p>
               }
-              <p class="text-xs text-gray-400 mt-1">km covered by min fare</p>
             </div>
 
             <div>
@@ -182,9 +178,9 @@
             </code>
           </div>
           <p class="text-xs text-gray-500 leading-relaxed">
-            The conductor app uses these settings to compute fares during ticketing. The minimum
+            These settings is used to compute fares during ticketing. The minimum
             fare applies up to the base distance; beyond it, the fare is the trip distance
-            multiplied by the per-km rate. Changes apply system-wide.
+            multiplied by the per-km rate.
           </p>
         </div>
       </div>
