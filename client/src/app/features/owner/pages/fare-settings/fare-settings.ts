@@ -103,6 +103,16 @@ export class FareSettings implements OnInit {
     return !!(c?.invalid && c?.touched);
   }
 
+  /** Error text shown under a field once it has been touched. */
+  fieldMessage(field: string): string {
+    const errors = this.form.get(field)?.errors;
+    if (!errors) return '';
+    if (errors['required']) return 'This field is required.';
+    if (errors['min']) return `Must be at least ${errors['min'].min}.`;
+    if (errors['max']) return `Must be at most ${errors['max'].max}.`;
+    return 'Invalid value.';
+  }
+
   previewFare(distance: number): Record<string, number> {
     const v = this.form.value;
     const minFare = parseFloat(v.minimum_fare) || 0;
