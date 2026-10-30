@@ -7,7 +7,7 @@ const getMyNotifications = async (req, res) => {
     const userId = req.user.id;
     const [items, unreadCount] = await Promise.all([
       Notification.findAll({
-        where: { user_id: userId },
+        where: { user_id: userId, read_at: { [Op.is]: null } },
         order: [["created_at", "DESC"]],
         limit: 30,
       }),

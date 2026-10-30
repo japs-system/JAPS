@@ -72,11 +72,9 @@ export class NotificationService {
   }
 
   markRead(n: AppNotification): void {
-    if (n.read_at) return;
-    this.items.update((list) =>
-      list.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)),
-    );
-    this.unreadCount.update((c) => Math.max(0, c - 1));
+    // Remove it from the list right away; it is marked read on the server too.
+    this.items.update((list) => list.filter((x) => x.id !== n.id));
+    if (!n.read_at) this.unreadCount.update((c) => Math.max(0, c - 1));
     this.http
       .put(`${this.API}/${n.id}/read`, {}, { withCredentials: true })
       .pipe(catchError(() => EMPTY))
@@ -84,8 +82,7 @@ export class NotificationService {
   }
 
   markAllRead(): void {
-    const now = new Date().toISOString();
-    this.items.update((list) => list.map((x) => ({ ...x, read_at: x.read_at ?? now })));
+    this.items.set([]);
     this.unreadCount.set(0);
     this.http
       .put(`${this.API}/read-all`, {}, { withCredentials: true })
