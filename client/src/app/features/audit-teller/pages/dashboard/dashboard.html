@@ -4,7 +4,6 @@
 
 <!-- Date range filter (same as the owner dashboard) -->
 <div class="flex flex-wrap items-center gap-2 mb-6 bg-white rounded-xl border border-gray-200 p-3">
-  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">Range</span>
   @for (preset of RANGE_PRESETS; track preset.value) {
     <button
       (click)="setRangePreset(preset.value)"
@@ -56,7 +55,6 @@
       </div>
     </div>
     <p class="text-3xl font-bold text-gray-800">{{ stats().pending }}</p>
-    <p class="text-xs text-gray-400 mt-1">Awaiting verification</p>
   </div>
 
   <!-- Approved -->
@@ -68,7 +66,6 @@
       </div>
     </div>
     <p class="text-3xl font-bold text-gray-800">{{ approvedCount() }}</p>
-    <p class="text-xs text-gray-400 mt-1">Verified Remittances</p>
   </div>
 
   <!-- Rejected -->
@@ -80,7 +77,6 @@
       </div>
     </div>
     <p class="text-3xl font-bold text-gray-800">{{ rejectedCount() }}</p>
-    <p class="text-xs text-gray-400 mt-1">Requires re-verification.</p>
   </div>
 </div>
 
