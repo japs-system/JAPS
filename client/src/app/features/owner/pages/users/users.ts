@@ -97,7 +97,7 @@ export class Users implements OnInit {
   readonly ROLES = USER_ROLES;
   // Generated passwords are the employee's last name (client request), so this has to
   // allow short surnames like "Go" or "Uy".
-  readonly PASSWORD_MIN_LENGTH = 8;
+  readonly PASSWORD_MIN_LENGTH = 6;
 
   form: FormGroup = this.fb.group({
     employee_id: ['', Validators.required],
@@ -118,6 +118,8 @@ export class Users implements OnInit {
     this.loadUsers();
     this.form.get('first_name')!.valueChanges.subscribe(() => this.suggestCredentials());
     this.form.get('last_name')!.valueChanges.subscribe(() => this.suggestCredentials());
+    this.form.get('role')!.valueChanges.subscribe(() => this.suggestCredentials());
+    this.form.get('employee_id')!.valueChanges.subscribe(() => this.suggestCredentials());
   }
 
   // ── Generated credentials (new users only) ────────────────────────────
@@ -153,18 +155,22 @@ export class Users implements OnInit {
     if (!username.dirty) {
       username.setValue(last ? `${cap(last)}${first.charAt(0).toUpperCase()}@${number}` : '');
     }
-    // Password: a generated three-word phrase + 2 digits, set once per new user.
+    // Password: first initial + last initial @ employee number + role code,
+    // e.g. Kyla Agustin, EMP-001, conductor -> KA@001C. Follows the role and name
+    // fields until the owner types a password themselves.
     const password = this.form.get('password')!;
-    if (!password.dirty && !password.value) password.setValue(this.randomPassword());
-  }
-
-  /** Easy to remember, hard to guess, e.g. Mango-River-Bus47. */
-  private randomPassword(): string {
-    const words = ['Mango', 'River', 'Bus', 'Sunrise', 'Coconut', 'Island', 'Tricycle', 'Palm', 'Lake', 'Cloud', 'Maya', 'Bayan'];
-    const rand = () => crypto.getRandomValues(new Uint32Array(1))[0];
-    const pick = () => words[rand() % words.length];
-    const num = String(rand() % 100).padStart(2, '0');
-    return `${pick()}-${pick()}-${pick()}${num}`;
+    if (!password.dirty) {
+      const initials = `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
+      const roleCodes: Record<string, string> = {
+        owner: 'O',
+        admin_staff: 'AS',
+        audit_teller: 'AT',
+        conductor: 'C',
+        driver: 'D',
+      };
+      const code = roleCodes[this.form.get('role')!.value] ?? '';
+      password.setValue(first && last ? `${initials}@${number}${code}` : '');
+    }
   }
 
   private uniqueUsername(base: string): string {
