@@ -32,6 +32,11 @@ const notify = (promise) => promise.catch((err) => console.error("Notification f
 const peso = (n) =>
   `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// A remittance amount: 0 up to 99,999.99 (5 digits), at most 2 decimal places.
+const MAX_REMITTANCE_AMOUNT = 99999.99;
+const isValidRemittanceAmount = (n) =>
+  Number.isFinite(n) && n >= 0 && n <= MAX_REMITTANCE_AMOUNT && Math.round(n * 100) / 100 === n;
+
 // Emails the conductor a confirmation + summary of the remittance they just (re)submitted.
 const notifyConductorOfSubmission = (remittance, isResubmission) =>
   notify(
@@ -493,7 +498,7 @@ const printTicket = async (req, res) => {
 
     const passengers = group.map(({ category, quantity }) => {
       const discountPercent = getDiscountPercent(category, fareSettings);
-      const unitFare = parseFloat((baseFare * (1 - discountPercent / 100)).toFixed(2));
+      const unitFare = Math.round(baseFare * (1 - discountPercent / 100));
       return {
         category,
         quantity,
@@ -730,7 +735,7 @@ const submitRemittance = async (req, res) => {
         .json({ message: "Missing required remittance fields." });
     }
 
-    const isValidAmount = (n) => Number.isFinite(n) && n >= 0;
+    const isValidAmount = isValidRemittanceAmount;
     const amountsOk = [
       driver_commission,
       conductor_commission,
@@ -745,7 +750,7 @@ const submitRemittance = async (req, res) => {
     );
     if (!amountsOk || !expensesOk) {
       await transaction.rollback();
-      return res.status(400).json({ message: "Enter valid amounts (0 or more)." });
+      return res.status(400).json({ message: "Amounts must be 0 to 99,999.99, with at most 2 decimal places." });
     }
 
     // 1. Fetch completed trips to calculate actual gross income
@@ -931,13 +936,13 @@ const resubmitRemittance = async (req, res) => {
     for (const field of amountFields) {
       amounts[field] = Number(req.body[field] ?? 0);
     }
-    const isValidAmount = (n) => Number.isFinite(n) && n >= 0;
+    const isValidAmount = isValidRemittanceAmount;
     const validExpenses = expenses.every(
       (e) => EXPENSE_TYPES.includes(e?.expense_type) && isValidAmount(Number(e.amount)),
     );
     if (!validExpenses || !Object.values(amounts).every(isValidAmount)) {
       await transaction.rollback();
-      return res.status(400).json({ message: "Enter valid amounts (0 or more)." });
+      return res.status(400).json({ message: "Amounts must be 0 to 99,999.99, with at most 2 decimal places." });
     }
 
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);

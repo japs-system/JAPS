@@ -16,12 +16,15 @@ const notify = (promise) => promise.catch((err) => console.error("Notification f
 const peso = (n) =>
   `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Cash received: 0 up to 999,999.99 (6 digits), at most 2 decimal places.
+const MAX_CASH_RECEIVED = 999999.99;
+
 // Converts the teller's "cash received" input to a number, or null when empty.
 // Returns undefined when the value is invalid (not a number, or negative).
 const parseCashReceived = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return undefined;
+  if (!Number.isFinite(n) || n < 0 || n > MAX_CASH_RECEIVED) return undefined;
   return Math.round(n * 100) / 100; // 2 decimal places
 };
 
@@ -256,7 +259,7 @@ const approveRemittance = async (req, res) => {
 
     const cashReceived = parseCashReceived(req.body.cash_received);
     if (cashReceived === undefined) {
-      return res.status(400).json({ message: "Invalid cash received amount." });
+      return res.status(400).json({ message: "Cash received must be 0 to 999,999.99." });
     }
 
     const remittance = await Remittance.findByPk(id, {
@@ -326,7 +329,7 @@ const rejectRemittance = async (req, res) => {
 
     const cashReceived = parseCashReceived(req.body.cash_received);
     if (cashReceived === undefined) {
-      return res.status(400).json({ message: "Invalid cash received amount." });
+      return res.status(400).json({ message: "Cash received must be 0 to 999,999.99." });
     }
 
     const remittance = await Remittance.findByPk(id, {

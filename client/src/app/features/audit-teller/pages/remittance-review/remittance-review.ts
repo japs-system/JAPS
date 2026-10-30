@@ -2,6 +2,7 @@ import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CurrencyPipe, DatePipe } from '@angular/common';
+import { NumericInput } from '../../../../shared/directives/numeric-input.directive';
 import { AlertService } from '../../../../core/services/alert.service';
 import { environment } from '../../../../../environments/environment';
 import {
@@ -66,7 +67,7 @@ interface TicketRecord {
 
 @Component({
   selector: 'app-remittance-review',
-  imports: [RouterLink, CurrencyPipe, DatePipe],
+  imports: [RouterLink, CurrencyPipe, DatePipe, NumericInput],
   templateUrl: './remittance-review.html',
 })
 export class RemittanceReviewPage implements OnInit {
@@ -176,9 +177,9 @@ blockInvalidKeys(e: KeyboardEvent): void {
           this.alertService.success('Approved', 'Remittance has been approved.');
           this.router.navigate(['/audit-teller/remittances']);
         },
-        error: () => {
+        error: (err) => {
           this.submitting.set(false);
-          this.alertService.error('Error', 'Failed to approve remittance.');
+          this.alertService.error('Error', err.error?.message ?? 'Failed to approve remittance.');
         },
       });
   }
@@ -198,9 +199,9 @@ blockInvalidKeys(e: KeyboardEvent): void {
           this.alertService.success('Rejected', 'Remittance has been rejected.');
           this.router.navigate(['/audit-teller/remittances']);
         },
-        error: () => {
+        error: (err) => {
           this.submitting.set(false);
-          this.alertService.error('Error', 'Failed to reject remittance.');
+          this.alertService.error('Error', err.error?.message ?? 'Failed to reject remittance.');
         },
       });
   }
