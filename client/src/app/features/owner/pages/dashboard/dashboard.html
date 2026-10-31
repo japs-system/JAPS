@@ -135,16 +135,16 @@
       </h3>
       <div class="flex flex-wrap gap-4 text-xs text-gray-500">
         <span class="flex items-center gap-1.5"
-          ><span class="w-5 h-0.5 bg-[#1E5AAA] inline-block rounded"></span>Passengers</span
+          ><span class="w-5 h-0.5 bg-[#1e3a8a] inline-block rounded"></span>Passengers</span
         >
         <span class="flex items-center gap-1.5"
-          ><span class="w-5 h-0.5 bg-amber-400 inline-block rounded"></span>Passenger forecast</span
+          ><span class="w-5 h-0.5 bg-sky-300 inline-block rounded"></span>Passenger forecast</span
         >
         <span class="flex items-center gap-1.5"
-          ><span class="w-5 h-0.5 bg-emerald-500 inline-block rounded"></span>Revenue</span
+          ><span class="w-5 h-0.5 bg-green-700 inline-block rounded"></span>Revenue</span
         >
         <span class="flex items-center gap-1.5"
-          ><span class="w-5 h-0.5 bg-emerald-500 inline-block rounded"></span>Revenue Forecast</span
+          ><span class="w-5 h-0.5 bg-green-300 inline-block rounded"></span>Revenue forecast</span
         >
       </div>
     </div>
@@ -184,7 +184,7 @@
           <polyline
             [attr.points]="revenueActualPolyline()"
             fill="none"
-            stroke="#10b981"
+            stroke="#15803d"
             stroke-width="2"
             stroke-linejoin="round"
             vector-effect="non-scaling-stroke"
@@ -193,7 +193,7 @@
             <polyline
               [attr.points]="revenueForecastPolyline()"
               fill="none"
-              stroke="#10b981"
+              stroke="#86efac"
               stroke-width="2"
               stroke-dasharray="5,3"
               stroke-linejoin="round"
@@ -204,7 +204,7 @@
           <polyline
             [attr.points]="actualPolyline()"
             fill="none"
-            stroke="#1E5AAA"
+            stroke="#1e3a8a"
             stroke-width="2"
             stroke-linejoin="round"
             vector-effect="non-scaling-stroke"
@@ -213,7 +213,7 @@
             <polyline
               [attr.points]="forecastPolyline()"
               fill="none"
-              stroke="#f59e0b"
+              stroke="#7dd3fc"
               stroke-width="2"
               stroke-dasharray="5,3"
               stroke-linejoin="round"
@@ -237,13 +237,14 @@
           ></div>
           <span
             class="absolute w-2.5 h-2.5 rounded-full ring-2 ring-white -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-            [class]="h.type === 'forecast' ? 'bg-amber-400' : 'bg-[#1E5AAA]'"
+            [class]="h.type === 'forecast' ? 'bg-sky-300' : 'bg-[#1e3a8a]'"
             [style.left.%]="h.xPct"
             [style.top.%]="h.yPPct"
           ></span>
           @if (h.yRPct !== null) {
             <span
-              class="absolute w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+              class="absolute w-2.5 h-2.5 rounded-full ring-2 ring-white -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+              [class]="h.type === 'forecast' ? 'bg-green-300' : 'bg-green-700'"
               [style.left.%]="h.xPct"
               [style.top.%]="h.yRPct"
             ></span>
@@ -261,14 +262,18 @@
             <p class="flex items-center gap-1.5">
               <span
                 class="w-2 h-2 rounded-full"
-                [class]="h.type === 'forecast' ? 'bg-amber-400' : 'bg-[#1E5AAA]'"
+                [class]="h.type === 'forecast' ? 'bg-sky-300' : 'bg-[#1e3a8a]'"
               ></span>
               {{ h.passengers | number: '1.0-0' }} passengers
             </p>
             @if (h.revenue !== null) {
               <p class="flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                {{ h.revenue | currency: 'PHP' : 'symbol' : '1.0-0' }} total revenue
+                <span
+                  class="w-2 h-2 rounded-full"
+                  [class]="h.type === 'forecast' ? 'bg-green-300' : 'bg-green-700'"
+                ></span>
+                {{ h.revenue | currency: 'PHP' : 'symbol' : '1.0-0' }}
+                {{ h.type === 'forecast' ? 'revenue forecast' : 'total revenue' }}
               </p>
             }
           </div>

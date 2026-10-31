@@ -31,7 +31,7 @@ export class Users implements OnInit {
   search = signal('');
   roleFilter = signal<NonOwnerRole | ''>('');
   statusFilter = signal<'' | 'active' | 'inactive'>('');
-  sortField = signal<SortField>('last_name');
+  sortField = signal<SortField>('employee_id');
   sortDir = signal<'asc' | 'desc'>('asc');
   pageSize = signal(10);
   currentPage = signal(1);
@@ -59,10 +59,22 @@ export class Users implements OnInit {
   sorted = computed(() => {
     const field = this.sortField();
     const dir = this.sortDir();
+    const mul = dir === 'asc' ? 1 : -1;
+    // Natural compare so EMP-2 < EMP-10 and EMP-009 < EMP-010.
+    const nat = (x: string, y: string) =>
+      x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' });
+    const text = (u: User, f: SortField) => String(u[f] ?? '');
     return [...this.filtered()].sort((a, b) => {
-      const av = String(a[field] ?? '').toLowerCase();
-      const bv = String(b[field] ?? '').toLowerCase();
-      return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      // Inactive users always go below active ones (unless sorting by Status itself).
+      if (field !== 'is_active' && a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+      let c: number;
+      if (field === 'is_active') c = Number(b.is_active) - Number(a.is_active); // active first when asc
+      else if (field === 'last_name')
+        // "Name" column: alphabetical by the name as displayed (first name, then last name)
+        c = nat(a.first_name ?? '', b.first_name ?? '') || nat(a.last_name ?? '', b.last_name ?? '');
+      else c = nat(text(a, field), text(b, field));
+      if (c === 0) c = nat(a.employee_id ?? '', b.employee_id ?? ''); // tie-break: employee number
+      return field === 'is_active' ? c * mul || nat(a.employee_id ?? '', b.employee_id ?? '') : c * mul;
     });
   });
 

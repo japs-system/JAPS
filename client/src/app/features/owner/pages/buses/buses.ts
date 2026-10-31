@@ -26,6 +26,7 @@ export interface CrewUser {
   first_name: string;
   last_name: string;
   role: string;
+  is_active?: boolean;
 }
 
 type SortField = 'bus_number' | 'plate_number' | 'capacity' | 'status';
@@ -159,8 +160,8 @@ export class Buses implements OnInit {
   loadCrewUsers(): void {
     this.http.get<CrewUser[]>(this.USERS_API, { withCredentials: true }).subscribe({
       next: (data) => {
-        this.drivers.set(data.filter((u) => u.role === 'driver'));
-        this.conductors.set(data.filter((u) => u.role === 'conductor'));
+        this.drivers.set(data.filter((u) => u.role === 'driver' && u.is_active !== false));
+        this.conductors.set(data.filter((u) => u.role === 'conductor' && u.is_active !== false));
       },
     });
   }
