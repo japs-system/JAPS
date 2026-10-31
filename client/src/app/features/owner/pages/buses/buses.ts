@@ -65,7 +65,7 @@ export class Buses implements OnInit {
     const q = this.search().toLowerCase().trim();
     const s = this.statusFilter();
     return this.allBuses().filter((b) => {
-      const matchSearch = !q || b.bus_number.toLowerCase().includes(q) || b.plate_number.toLowerCase().includes(q);
+      const matchSearch = !q || b.bus_number.toLowerCase().includes(q) || (b.plate_number ?? '').toLowerCase().includes(q);
       const matchStatus = !s || b.status === s;
       return matchSearch && matchStatus;
     });
@@ -73,7 +73,17 @@ export class Buses implements OnInit {
 
   sorted = computed(() => {
     const f = this.sortField(), d = this.sortDir();
+    // Keep inactive buses at the bottom of the whole list (across all pages),
+    // unless the user is explicitly sorting by the Status column.
+    const inactiveLast = f !== 'status';
+
     return [...this.filtered()].sort((a, b) => {
+      if (inactiveLast) {
+        const aInactive = a.status === 'inactive' ? 1 : 0;
+        const bInactive = b.status === 'inactive' ? 1 : 0;
+        if (aInactive !== bInactive) return aInactive - bInactive;
+      }
+
       const av = String(a[f] ?? '').toLowerCase();
       const bv = String(b[f] ?? '').toLowerCase();
       return d === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
