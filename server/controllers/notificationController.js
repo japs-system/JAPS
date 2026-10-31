@@ -1,18 +1,34 @@
 const { Op } = require("sequelize");
 const { Notification } = require("../models");
 
+// Minimum number of notifications shown in the bell (unread ones are always shown).
+const MIN_SHOWN = 5;
+
 // GET /api/notifications
 const getMyNotifications = async (req, res) => {
   try {
     const userId = req.user.id;
-    const [items, unreadCount] = await Promise.all([
-      Notification.findAll({
-        where: { user_id: userId, read_at: { [Op.is]: null } },
-        order: [["created_at", "DESC"]],
-        limit: 30,
-      }),
-      Notification.count({ where: { user_id: userId, read_at: { [Op.is]: null } } }),
-    ]);
+    // All unread notifications stay. If there are fewer than MIN_SHOWN, the list is
+    // topped up with the most recent already-read ones so it never looks empty.
+    const unread = await Notification.findAll({
+      where: { user_id: userId, read_at: { [Op.is]: null } },
+      order: [["created_at", "DESC"]],
+      limit: 50,
+    });
+    const unreadCount = await Notification.count({
+      where: { user_id: userId, read_at: { [Op.is]: null } },
+    });
+    const missing = Math.max(0, MIN_SHOWN - unread.length);
+    const recentRead = missing
+      ? await Notification.findAll({
+          where: { user_id: userId, read_at: { [Op.not]: null } },
+          order: [["created_at", "DESC"]],
+          limit: missing,
+        })
+      : [];
+    const items = [...unread, ...recentRead].sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at),
+    );
     return res.json({ items, unreadCount });
   } catch (error) {
     console.error("Error fetching notifications:", error);

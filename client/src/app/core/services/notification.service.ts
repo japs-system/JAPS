@@ -71,10 +71,22 @@ export class NotificationService {
     this.refresh$.next();
   }
 
+  /** Keeps unread items plus enough read ones to fill the minimum list size. */
+  private static readonly MIN_SHOWN = 5;
+  private trim(list: AppNotification[]): AppNotification[] {
+    const unread = list.filter((x) => !x.read_at);
+    const read = list.filter((x) => x.read_at).slice(0, Math.max(0, NotificationService.MIN_SHOWN - unread.length));
+    return [...unread, ...read].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+  }
+
   markRead(n: AppNotification): void {
-    // Remove it from the list right away; it is marked read on the server too.
-    this.items.update((list) => list.filter((x) => x.id !== n.id));
-    if (!n.read_at) this.unreadCount.update((c) => Math.max(0, c - 1));
+    if (n.read_at) return; // already read: nothing to do, it just stays in the list
+    const now = new Date().toISOString();
+    // Mark it read right away but keep it in the list; it is marked read on the server too.
+    this.items.update((list) => this.trim(list.map((x) => (x.id === n.id ? { ...x, read_at: now } : x))));
+    this.unreadCount.update((c) => Math.max(0, c - 1));
     this.http
       .put(`${this.API}/${n.id}/read`, {}, { withCredentials: true })
       .pipe(catchError(() => EMPTY))
@@ -82,7 +94,8 @@ export class NotificationService {
   }
 
   markAllRead(): void {
-    this.items.set([]);
+    const now = new Date().toISOString();
+    this.items.update((list) => this.trim(list.map((x) => (x.read_at ? x : { ...x, read_at: now }))));
     this.unreadCount.set(0);
     this.http
       .put(`${this.API}/read-all`, {}, { withCredentials: true })
