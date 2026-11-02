@@ -224,8 +224,4 @@ export class TicketsPage implements OnInit {
   isAllRegular(t: Ticket): boolean {
     return ticketPassengers(t).every((l) => l.category === 'regular');
   }
-
-  getTotalRevenue(): number {
-    return this.filtered().reduce((sum, t) => sum + Number(t.fare), 0);
-  }
 }
