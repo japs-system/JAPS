@@ -26,6 +26,7 @@ interface DashboardData {
   kpi: {
     net_gross_in_range: number;
     total_revenue_in_range: number;
+    revenue_growth_pct?: string | null;
     driver_commission_in_range: number;
     conductor_commission_in_range: number;
     passenger_count_in_range: number;
@@ -33,6 +34,8 @@ interface DashboardData {
     bus_utilisation_rate: number;
     total_buses: number;
     buses_in_use_today: number;
+    avg_buses_in_use_per_day?: number;
+    bus_active_days?: number;
     remittance_approved: number;
     remittance_total: number;
     remittance_pending: number;
@@ -47,6 +50,7 @@ interface DashboardData {
     trip_count: string;
     origin: string;
     destination: string;
+    stops?: { name: string; revenue: number; passengers: number }[];
   }[];
   peak_hours: { hour: number; ticket_count: string }[];
   weekday_weekend: { month: number; dow: number; total: string }[];
@@ -61,6 +65,8 @@ interface DashboardData {
 }
 
 interface ForecastData {
+  /** Last day that has data; the 7-day forecast continues from here. */
+  anchor_date?: string;
   kpi_forecast: {
     predicted_passengers_tomorrow: number;
     passenger_growth_pct_tomorrow: string | null;
@@ -111,7 +117,8 @@ export class Dashboard implements OnInit {
   }
 
   private resolvedRange(): { from: string; to: string } | null {
-    const toIso = (d: Date) => d.toISOString().split('T')[0];
+    // Local calendar dates (toISOString() is UTC and shifts the day before 8 AM in PH time).
+    const toIso = (d: Date) => this.localKey(d);
     const now = new Date();
     switch (this.rangePreset()) {
       case 'today':
@@ -227,7 +234,7 @@ export class Dashboard implements OnInit {
     const from = new Date(`${d.range.from}T00:00:00`);
     const to = new Date(`${d.range.to}T00:00:00`);
     for (let dt = new Date(from); dt <= to; dt.setDate(dt.getDate() + 1)) {
-      const key = dt.toISOString().split('T')[0];
+      const key = this.localKey(dt);
       const found = d.daily_passengers.find((r) => r.date?.toString().startsWith(key));
       result.push({
         label: days[dt.getDay() === 0 ? 6 : dt.getDay() - 1],
@@ -241,13 +248,30 @@ export class Dashboard implements OnInit {
     Math.max(...this.dailyPassengerBars().map((b) => b.value), 1),
   );
 
+  /** Route whose stop breakdown is open (null = all collapsed). */
+  expandedRoute = signal<number | null>(null);
+  toggleRoute(id: number): void {
+    this.expandedRoute.set(this.expandedRoute() === id ? null : id);
+  }
+
   routeBars = computed(() => {
     const d = this.dash();
     if (!d) return [];
-    return d.route_profit.map((r) => ({
-      label: `${r.origin} – ${r.destination}`,
-      revenue: Number(r.revenue),
-    }));
+    return d.route_profit.map((r) => {
+      const stops = (r.stops ?? []).map((s) => ({
+        name: s.name,
+        revenue: Number(s.revenue),
+        passengers: Number(s.passengers),
+      }));
+      const maxStop = Math.max(...stops.map((s) => s.revenue), 1);
+      return {
+        id: r.route_id,
+        label: `${r.origin} – ${r.destination}`,
+        revenue: Number(r.revenue),
+        trips: Number(r.trip_count),
+        stops: stops.map((s) => ({ ...s, pct: (s.revenue / maxStop) * 100 })),
+      };
+    });
   });
 
   maxRouteRevenue = computed(() => Math.max(...this.routeBars().map((r) => r.revenue), 1));
@@ -261,6 +285,25 @@ export class Dashboard implements OnInit {
   });
   // Evenly spaced along the chart's 6 AM – 9 PM axis.
   peakHourLabels = [6, 9, 12, 15, 18, 21];
+
+  /** Busiest hours of the day within the selected range (top 5), from ticket issue times. */
+  peakHoursTop = computed(() => {
+    const d = this.dash();
+    if (!d) return [];
+    const days = Math.max(1, (d.daily_passengers ?? []).filter((r) => Number(r.total) > 0).length);
+    return (d.peak_hours ?? [])
+      .map((r) => ({
+        hour: Number(r.hour),
+        total: Number(r.ticket_count),
+        avg: Number(r.ticket_count) / days,
+      }))
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  });
+
+  /** Remittances KPI card: approved revenue / cash received are hidden until expanded. */
+  remittanceOpen = signal(false);
 
   /** Daily total revenue of approved remittances across the selected range (weekend flagged). */
   remittanceDailyBars = computed(() => {
@@ -309,20 +352,29 @@ export class Dashboard implements OnInit {
   });
   maxRemittanceDaily = computed(() => Math.max(...this.remittanceDailyBars().map((b) => b.value), 1));
 
-  /** Passengers per day of the week (Mon–Sun, last 12 weeks), tagged with the seasonal demand factor. */
+  /**
+   * Average passengers per day of the week across the selected range
+   * (total for that weekday ÷ how many of that weekday fall in the range),
+   * tagged with a demand factor = that average ÷ the average of all weekdays.
+   */
   dayOfWeekBars = computed(() => {
     const d = this.dash();
     if (!d) return [];
     const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const totals = Array(7).fill(0);
     for (const r of d.weekday_weekend) totals[Number(r.dow)] += Number(r.total);
-    const factors = new Map<string, number>(
-      (this.fore()?.seasonal_factors ?? []).map((s) => [s.dow, s.factor] as [string, number]),
-    );
+    const occ = Array(7).fill(0);
+    const to = new Date(`${d.range.to}T00:00:00`);
+    for (let dt = new Date(`${d.range.from}T00:00:00`); dt <= to; dt.setDate(dt.getDate() + 1)) {
+      occ[dt.getDay()]++;
+    }
+    const avgs = totals.map((t, i) => (occ[i] ? t / occ[i] : 0));
+    const active = avgs.filter((a) => a > 0);
+    const mean = active.length ? active.reduce((s, a) => s + a, 0) / active.length : 0;
     return [1, 2, 3, 4, 5, 6, 0].map((i) => ({
       label: names[i],
-      value: totals[i],
-      factor: factors.get(names[i]) ?? null,
+      value: Math.round(avgs[i]),
+      factor: mean > 0 && avgs[i] > 0 ? avgs[i] / mean : null,
     }));
   });
 
@@ -348,46 +400,119 @@ export class Dashboard implements OnInit {
   /** Index of the day under the cursor (null when not hovering). */
   hoverIndex = signal<number | null>(null);
 
-  splitIndex = computed(
-    () => (this.fore()?.demand_series ?? []).filter((p) => p.type === 'actual').length,
+  private localKey(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  /**
+   * One entry per day of the selected range (actual passengers + approved total revenue).
+   * When the range reaches today, the 7-day forecast is appended after it.
+   */
+  chartSeries = computed(() => {
+    const d = this.dash();
+    if (!d) return [];
+    const pax = new Map<string, number>(
+      (d.daily_passengers ?? []).map((r) => [String(r.date).slice(0, 10), Number(r.total)]),
+    );
+    const rev = new Map<string, number>(
+      (d.remittance_daily ?? []).map((r) => [String(r.date).slice(0, 10), Number(r.total_revenue)]),
+    );
+    const out: {
+      date: string;
+      type: 'actual' | 'forecast';
+      passengers: number;
+      revenue: number | null;
+    }[] = [];
+    const f = this.fore();
+    // The forecast continues from the last day that has data (falls back to today).
+    const anchor = f?.anchor_date ?? this.localKey(new Date());
+    // Actual days stop at the anchor: later days have no data to show.
+    const lastActual = d.range.to < anchor ? d.range.to : anchor;
+    const to = new Date(`${lastActual}T00:00:00`);
+    for (let dt = new Date(`${d.range.from}T00:00:00`); dt <= to; dt.setDate(dt.getDate() + 1)) {
+      const key = this.localKey(dt);
+      out.push({ date: key, type: 'actual', passengers: pax.get(key) ?? 0, revenue: rev.get(key) ?? 0 });
+    }
+    // Append the forecast only when the selected range contains the anchor day.
+    if (f && d.range.from <= anchor && d.range.to >= anchor) {
+      const frev = new Map<string, number>();
+      for (const p of f.revenue_series ?? []) {
+        if (p.type === 'forecast') frev.set(p.date.slice(0, 10), p.value);
+      }
+      for (const p of f.revenue_forecast_7d ?? []) {
+        if (!frev.has(p.date.slice(0, 10))) frev.set(p.date.slice(0, 10), p.predicted);
+      }
+      for (const p of f.demand_series ?? []) {
+        const key = p.date.slice(0, 10);
+        if (p.type === 'forecast' && key > anchor) {
+          out.push({ date: key, type: 'forecast', passengers: p.value, revenue: frev.get(key) ?? null });
+        }
+      }
+    }
+    return out;
+  });
+
+  /** Label for the divider between actual and forecast: "Today" when data is current. */
+  splitLabel = computed(() => {
+    const anchor = this.fore()?.anchor_date;
+    return !anchor || anchor === this.localKey(new Date()) ? 'Today' : 'Last data';
+  });
+
+  /** True when the selected range has any passengers or approved revenue to draw. */
+  hasChartData = computed(() =>
+    this.chartSeries().some((p) => p.type === 'actual' && (p.passengers > 0 || (p.revenue ?? 0) > 0)),
   );
 
-  allDemandValues = computed(() => (this.fore()?.demand_series ?? []).map((p) => p.value));
+  rangeTitle = computed(() => {
+    const d = this.dash();
+    if (!d) return '';
+    const fmt = (s: string) =>
+      new Date(`${s}T00:00:00`).toLocaleDateString('en-PH', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    const base = d.range.from === d.range.to ? fmt(d.range.from) : `${fmt(d.range.from)} – ${fmt(d.range.to)}`;
+    return this.chartSeries().some((p) => p.type === 'forecast') ? `${base} + 7-Day Forecast` : base;
+  });
+
+  splitIndex = computed(() => this.chartSeries().filter((p) => p.type === 'actual').length);
+
+  allDemandValues = computed(() => this.chartSeries().map((p) => p.passengers));
 
   demandLabels = computed(() =>
-    (this.fore()?.demand_series ?? []).map((p) => {
+    this.chartSeries().map((p) => {
       const d = new Date(`${p.date}T00:00:00`);
       return `${d.getMonth() + 1}/${d.getDate()}`;
     }),
   );
 
+  /** Show roughly 14 x-axis labels at most, whatever the range length. */
+  labelStride = computed(() => Math.max(1, Math.ceil(this.chartSeries().length / 14)));
+
   maxPassengers = computed(() => Math.max(...this.allDemandValues(), 1));
-  maxRevenue = computed(() =>
-    Math.max(...(this.fore()?.revenue_series ?? []).map((p) => p.value), 1),
-  );
+  maxRevenue = computed(() => Math.max(...this.chartSeries().map((p) => p.revenue ?? 0), 1));
 
   /** One entry per day: passengers + revenue, with SVG coordinates and % positions for hover markers. */
   demandPoints = computed(() => {
-    const f = this.fore();
-    const series = f?.demand_series ?? [];
-    const rev = f?.revenue_series ?? [];
+    const series = this.chartSeries();
     const n = series.length;
     const maxP = this.maxPassengers();
     const maxR = this.maxRevenue();
     const yOf = (v: number, max: number) => 116 - (v / max) * 108;
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return series.map((p, i) => {
-      const r = rev[i];
       const x = ((i + 0.5) / n) * this.CHART_W;
-      const yP = yOf(p.value, maxP);
-      const yR = r ? yOf(r.value, maxR) : null;
+      const yP = yOf(p.passengers, maxP);
+      const yR = p.revenue === null ? null : yOf(p.revenue, maxR);
       const d = new Date(`${p.date}T00:00:00`);
       return {
         date: p.date,
         label: `${dayNames[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`,
         type: p.type,
-        passengers: p.value,
-        revenue: r ? r.value : null,
+        passengers: p.passengers,
+        revenue: p.revenue,
         x,
         yP,
         yR,
@@ -448,11 +573,38 @@ export class Dashboard implements OnInit {
     );
   }
 
-  growthClass(val: string | null): string {
-    return !val ? 'text-gray-400' : +val >= 0 ? 'text-green-600' : 'text-red-500';
+  // ── Growth vs previous period (KPI cards) ─────────────────────────────────
+  private growthNum(val: string | null | undefined): number | null {
+    if (val === null || val === undefined || val === '') return null;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
   }
-  growthPrefix(val: string | null): string {
-    return !val ? '' : +val >= 0 ? '+' : '';
+
+  hasGrowth(val: string | null | undefined): boolean {
+    return this.growthNum(val) !== null;
+  }
+
+  growthClass(val: string | null | undefined): string {
+    const n = this.growthNum(val);
+    if (n === null || n === 0) return 'text-gray-400';
+    return n > 0 ? 'text-green-600' : 'text-red-500';
+  }
+
+  growthBgClass(val: string | null | undefined): string {
+    const n = this.growthNum(val);
+    if (n === null || n === 0) return 'bg-gray-100';
+    return n > 0 ? 'bg-green-50' : 'bg-red-50';
+  }
+
+  growthIcon(val: string | null | undefined): string {
+    const n = this.growthNum(val);
+    if (n === null || n === 0) return 'pi-minus';
+    return n > 0 ? 'pi-arrow-up-right' : 'pi-arrow-down-right';
+  }
+
+  growthLabel(val: string | null | undefined): string {
+    const n = this.growthNum(val);
+    return n === null ? '' : `${Math.abs(n).toFixed(1)}%`;
   }
 
   insightStyle(tone: InsightTone) {

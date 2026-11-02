@@ -52,6 +52,9 @@ router.get("/dashboard", async (req, res) => {
       rangeStart = new Date(now.getFullYear(), now.getMonth(), 1);
       rangeEnd = now;
     }
+    // Local calendar-day keys for the selected range (used by date-column queries).
+    const rangeFromKey = localKey(rangeStart);
+    const rangeToKey = localKey(rangeEnd);
     // Comparison window: the immediately preceding period of equal length.
     const rangeMs = rangeEnd.getTime() - rangeStart.getTime();
     const prevRangeEnd = new Date(rangeStart.getTime() - 1);
@@ -70,15 +73,6 @@ router.get("/dashboard", async (req, res) => {
         where: {
           status: "approved",
           submitted_at: { [Op.between]: [prevRangeStart, prevRangeEnd] },
-        },
-      })) || 0;
-
-    // ── KPI: Total revenue (completed trips' grand_total) in the range ──
-    const totalRevenueInRange =
-      (await Trip.sum("grand_total", {
-        where: {
-          status: "completed",
-          departure_time: { [Op.between]: [rangeStart, rangeEnd] },
         },
       })) || 0;
 
@@ -116,30 +110,54 @@ router.get("/dashboard", async (req, res) => {
           ).toFixed(1)
         : null;
 
-    // ── KPI: Bus utilisation ───────────────────────────────────────────────
+    // ── KPI: Bus utilisation — average share of active buses used per day ──
+    // Averaged over the days in the range that had at least one trip.
     const totalBuses = await BusModel.count({ where: { status: "active" } });
     const busesInUseToday = await Trip.count({
       distinct: true,
       col: "bus_id",
-      where: { 
+      where: {
         status: { [Op.in]: ["ongoing", "completed"] },
         departure_time: { [Op.between]: [todayStart, todayEnd] },
       },
     });
+    const [busUsage] = await sequelize.query(
+      `SELECT COALESCE(AVG(d.buses), 0) AS avg_buses, COUNT(*) AS active_days
+       FROM (
+         SELECT t.departure_time::date AS day, COUNT(DISTINCT t.bus_id) AS buses
+         FROM trips t
+         WHERE t.status IN ('ongoing', 'completed')
+           AND t.departure_time BETWEEN :start AND :end
+         GROUP BY t.departure_time::date
+       ) d`,
+      {
+        replacements: { start: rangeStart, end: rangeEnd },
+        type: sequelize.QueryTypes.SELECT,
+      },
+    );
+    const avgBusesInUse = Math.round((Number(busUsage?.avg_buses) || 0) * 10) / 10;
     const busUtilRate =
-      totalBuses > 0 ? Math.round((busesInUseToday / totalBuses) * 100) : 0;
+      totalBuses > 0
+        ? Math.min(100, Math.round((avgBusesInUse / totalBuses) * 100))
+        : 0;
 
-    // ── KPI: Remittance counts ─────────────────────────────────────────────
-    const remittanceApproved = await Remittance.count({
-      where: { status: "approved" },
-    });
-    const remittanceTotal = await Remittance.count();
-    const remittancePending = await Remittance.count({
-      where: { status: "submitted" },
-    });
-    const remittanceRejected = await Remittance.count({
-      where: { status: "rejected" },
-    });
+    // ── KPI: Remittance counts within the selected range (by remittance date) ──
+    const [remitCounts] = await sequelize.query(
+      `SELECT COUNT(*) AS total,
+              COUNT(*) FILTER (WHERE status = 'approved') AS approved,
+              COUNT(*) FILTER (WHERE status = 'submitted') AS pending,
+              COUNT(*) FILTER (WHERE status = 'rejected') AS rejected
+       FROM remittances
+       WHERE date BETWEEN :from AND :to`,
+      {
+        replacements: { from: rangeFromKey, to: rangeToKey },
+        type: sequelize.QueryTypes.SELECT,
+      },
+    );
+    const remittanceTotal = Number(remitCounts?.total) || 0;
+    const remittanceApproved = Number(remitCounts?.approved) || 0;
+    const remittancePending = Number(remitCounts?.pending) || 0;
+    const remittanceRejected = Number(remitCounts?.rejected) || 0;
 
     // ── Daily passenger volume within the selected range (raw SQL) ────────
     const dailyPassengersRaw = await sequelize.query(
@@ -155,7 +173,7 @@ router.get("/dashboard", async (req, res) => {
       },
     );
 
-    // ── Route profitability (via trips) ───────────────────────────────────
+    // ── Route profitability within the range (via completed trips) ────────
     const routeProfit = await sequelize.query(
       `SELECT t.route_id, r.origin, r.destination,
               SUM(t.grand_total) AS revenue,
@@ -163,11 +181,41 @@ router.get("/dashboard", async (req, res) => {
        FROM trips t
        JOIN routes r ON r.id = t.route_id
        WHERE t.status = 'completed'
+         AND t.departure_time BETWEEN :start AND :end
        GROUP BY t.route_id, r.origin, r.destination
-       ORDER BY revenue DESC
-       LIMIT 6`,
-      { type: sequelize.QueryTypes.SELECT },
+       ORDER BY revenue DESC`,
+      {
+        replacements: { start: rangeStart, end: rangeEnd },
+        type: sequelize.QueryTypes.SELECT,
+      },
     );
+
+    // Revenue per boarding stop of each route (ticket fares), for the dropdown.
+    const stopRevenue = await sequelize.query(
+      `SELECT t.route_id,
+              COALESCE(NULLIF(tk.boarding_point, ''), 'Unknown') AS stop,
+              SUM(tk.fare) AS revenue,
+              SUM(COALESCE(tk.passenger_count, 1)) AS passengers
+       FROM tickets tk
+       JOIN trips t ON t.id = tk.trip_id
+       WHERE t.status = 'completed'
+         AND t.departure_time BETWEEN :start AND :end
+       GROUP BY t.route_id, COALESCE(NULLIF(tk.boarding_point, ''), 'Unknown')
+       ORDER BY revenue DESC`,
+      {
+        replacements: { start: rangeStart, end: rangeEnd },
+        type: sequelize.QueryTypes.SELECT,
+      },
+    );
+    const stopsByRoute = {};
+    for (const row of stopRevenue) {
+      (stopsByRoute[row.route_id] ||= []).push({
+        name: row.stop,
+        revenue: Number(row.revenue) || 0,
+        passengers: Number(row.passengers) || 0,
+      });
+    }
+    for (const r of routeProfit) r.stops = stopsByRoute[r.route_id] ?? [];
 
     // ── Peak hour analysis (last 30 days) ─────────────────────────────────
     const thirtyDaysAgo = new Date(now);
@@ -223,8 +271,6 @@ router.get("/dashboard", async (req, res) => {
     );
 
     // ── Remittances in the range: approved revenue + cash variance ─────────
-    const rangeFromKey = localKey(rangeStart);
-    const rangeToKey = localKey(rangeEnd);
     const [remitRange] = await sequelize.query(
       `SELECT COALESCE(SUM(net_collection + cash_deposit), 0) AS revenue,
               COALESCE(SUM(cash_received - (net_collection + cash_deposit))
@@ -236,6 +282,31 @@ router.get("/dashboard", async (req, res) => {
         type: sequelize.QueryTypes.SELECT,
       },
     );
+
+    // ── Total revenue = cash deposit + net collection (approved remittances) ──
+    // Same definition for the selected range and the previous period of equal length.
+    const totalRevenueInRange = Number(remitRange?.revenue) || 0;
+    const [remitPrev] = await sequelize.query(
+      `SELECT COALESCE(SUM(net_collection + cash_deposit), 0) AS revenue
+       FROM remittances
+       WHERE status = 'approved' AND date BETWEEN :from AND :to`,
+      {
+        replacements: {
+          from: localKey(prevRangeStart),
+          to: localKey(prevRangeEnd),
+        },
+        type: sequelize.QueryTypes.SELECT,
+      },
+    );
+    const totalRevenuePrevRange = Number(remitPrev?.revenue) || 0;
+    const revenueGrowth =
+      totalRevenuePrevRange > 0
+        ? (
+            ((totalRevenueInRange - totalRevenuePrevRange) /
+              totalRevenuePrevRange) *
+            100
+          ).toFixed(1)
+        : null;
 
     // ── Daily total revenue of approved remittances in the range ──────────
     const remittanceDaily = await sequelize.query(
@@ -277,7 +348,7 @@ router.get("/dashboard", async (req, res) => {
       weekdayWeekend: weekdayWeekendRaw,
       busUtilisationRate: busUtilRate,
       totalBuses,
-      busesInUseToday,
+      busesInUseToday: avgBusesInUse,
       remittancePending,
       tripsCompleted: Number(tripPerf?.completed) || 0,
       tripsCancelled: Number(tripPerf?.cancelled) || 0,
@@ -294,12 +365,15 @@ router.get("/dashboard", async (req, res) => {
       },
       kpi: {
         net_gross_in_range: netGrossInRange,
-        total_revenue_in_range: Number(totalRevenueInRange),
+        total_revenue_in_range: totalRevenueInRange,
+        revenue_growth_pct: revenueGrowth,
         passenger_count_in_range: passengerCountInRange,
         passenger_growth_pct: passengerGrowth,
         bus_utilisation_rate: busUtilRate,
         total_buses: totalBuses,
         buses_in_use_today: busesInUseToday,
+        avg_buses_in_use_per_day: avgBusesInUse,
+        bus_active_days: Number(busUsage?.active_days) || 0,
         remittance_approved: remittanceApproved,
         remittance_total: remittanceTotal,
         remittance_pending: remittancePending,
@@ -376,18 +450,40 @@ router.get("/forecast", async (req, res) => {
   try {
     const now = new Date();
 
-    // ── 1. Daily passenger data – last 90 days ───────────────────────────
-    const ninetyDaysAgo = new Date(now);
-    ninetyDaysAgo.setDate(now.getDate() - 90);
+    // ── 0. Anchor: the last day that actually has data (never after today) ──
+    // The 90-day window and the 7-day forecast are built relative to this day,
+    // so history that stops before today still produces a meaningful forecast.
+    const [lastPax] = await sequelize.query(
+      `SELECT to_char(MAX(t.departure_time::date), 'YYYY-MM-DD') AS d
+       FROM trips t
+       JOIN passenger_counts pc ON pc.trip_id = t.id
+       WHERE pc.count > 0 AND t.departure_time <= :now`,
+      { replacements: { now }, type: sequelize.QueryTypes.SELECT },
+    );
+    const [lastRev] = await sequelize.query(
+      `SELECT to_char(MAX(date), 'YYYY-MM-DD') AS d
+       FROM remittances
+       WHERE status = 'approved' AND date <= :today
+         AND (net_collection + cash_deposit) > 0`,
+      { replacements: { today: localKey(now) }, type: sequelize.QueryTypes.SELECT },
+    );
+    const anchorKey =
+      [lastPax?.d, lastRev?.d].filter(Boolean).sort().pop() ?? localKey(now);
+    const anchor = new Date(`${anchorKey}T00:00:00`);
+    const anchorEnd = new Date(`${anchorKey}T23:59:59.999`);
+
+    // ── 1. Daily passenger data – 90 days ending on the anchor ────────────
+    const ninetyDaysAgo = new Date(anchor);
+    ninetyDaysAgo.setDate(anchor.getDate() - 89);
     const dailyRaw = await sequelize.query(
       `SELECT to_char(t.departure_time::date, 'YYYY-MM-DD') AS date, COALESCE(SUM(pc.count),0) AS total
        FROM trips t
        LEFT JOIN passenger_counts pc ON pc.trip_id = t.id
-       WHERE t.departure_time >= :since
+       WHERE t.departure_time >= :since AND t.departure_time <= :until
        GROUP BY t.departure_time::date
        ORDER BY t.departure_time::date ASC`,
       {
-        replacements: { since: ninetyDaysAgo },
+        replacements: { since: ninetyDaysAgo, until: anchorEnd },
         type: sequelize.QueryTypes.SELECT,
       },
     );
@@ -399,7 +495,7 @@ router.get("/forecast", async (req, res) => {
     }
     const dailyDense = [];
     for (let i = 89; i >= 0; i--) {
-      const d = new Date(now);
+      const d = new Date(anchor);
       d.setDate(d.getDate() - i);
       const key = localKey(d);
       dailyDense.push({
@@ -431,11 +527,11 @@ router.get("/forecast", async (req, res) => {
       `SELECT to_char(date, 'YYYY-MM-DD') AS date,
               COALESCE(SUM(net_collection + cash_deposit), 0) AS revenue
        FROM remittances
-       WHERE status = 'approved' AND date >= :since
+       WHERE status = 'approved' AND date >= :since AND date <= :until
        GROUP BY date
        ORDER BY date ASC`,
       {
-        replacements: { since: localKey(ninetyDaysAgo) },
+        replacements: { since: localKey(ninetyDaysAgo), until: anchorKey },
         type: sequelize.QueryTypes.SELECT,
       },
     );
@@ -444,7 +540,7 @@ router.get("/forecast", async (req, res) => {
     for (const r of revenueRaw) revMap[r.date] = Number(r.revenue);
     const revDense = [];
     for (let i = 89; i >= 0; i--) {
-      const d = new Date(now);
+      const d = new Date(anchor);
       d.setDate(d.getDate() - i);
       const key = localKey(d);
       revDense.push({ date: key, value: revMap[key] ?? 0 });
@@ -456,15 +552,12 @@ router.get("/forecast", async (req, res) => {
     const revenueForecast7 = revenueResult.predictions;
 
     // ── 7. Predicted revenue / passengers tomorrow (single KPI) ─────────
-    const tomorrowDow = new Date(now);
-    tomorrowDow.setDate(now.getDate() + 1);
     const predictedPassengersTomorrow = passengerForecast7[0]?.predicted ?? 0;
     const predictedRevenueTomorrow = revenueForecast7[0]?.predicted ?? 0;
 
-    // Growth % relative to today's actual
-    const todayKey = localKey(now);
-    const todayPassengers = dailyMap[todayKey] ?? 0;
-    const todayRevenue = revMap[localKey(now)] ?? 0;
+    // Growth % relative to the anchor day's actual (today when data is current)
+    const todayPassengers = dailyMap[anchorKey] ?? 0;
+    const todayRevenue = revMap[anchorKey] ?? 0;
     const passengerGrowthTomorrow =
       todayPassengers > 0
         ? (
@@ -482,18 +575,20 @@ router.get("/forecast", async (req, res) => {
         : null;
 
     // ── 8. Bus utilisation forecast (ML or exponential-smoothing fallback) ──
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(now.getDate() - 30);
+    const thirtyDaysAgo = new Date(anchor);
+    thirtyDaysAgo.setDate(anchor.getDate() - 30);
     const utilRaw = await sequelize.query(
       `SELECT t.departure_time::date AS date,
               COUNT(DISTINCT t.bus_id)::float / GREATEST(:total,1) * 100 AS util_pct
        FROM trips t
-       WHERE t.departure_time >= :since AND t.status IN ('ongoing','completed')
+       WHERE t.departure_time >= :since AND t.departure_time <= :until
+         AND t.status IN ('ongoing','completed')
        GROUP BY t.departure_time::date
        ORDER BY t.departure_time::date ASC`,
       {
         replacements: {
           since: ninetyDaysAgo,
+          until: anchorEnd,
           total: Math.max(
             1,
             await BusModel.count({ where: { status: "active" } }),
@@ -555,6 +650,7 @@ router.get("/forecast", async (req, res) => {
     ];
 
     return res.json({
+      anchor_date: anchorKey,
       kpi_forecast: {
         predicted_passengers_tomorrow: predictedPassengersTomorrow,
         passenger_growth_pct_tomorrow: passengerGrowthTomorrow,

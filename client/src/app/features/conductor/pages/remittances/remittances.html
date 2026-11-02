@@ -17,7 +17,7 @@
   @if (activeTab() === 'list') {
     <div class="bg-white rounded-lg shadow-sm overflow-hidden">
       <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
-        <div class="relative w-full sm:w-60">
+        <div class="relative w-full sm:w-80">
           <i
             class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"
           ></i>
@@ -625,7 +625,7 @@
                   </div>
                 </div>
                 <div class="border-t border-gray-100 pt-4">
-                  <h4 class="font-bold text-gray-700 text-xs mb-3">Cash Bound (Optional)</h4>
+                  <h4 class="font-bold text-gray-700 text-xs mb-3">Cash Bond (Optional)</h4>
                   <div class="grid grid-cols-2 gap-3">
                     <div>
                       <label
@@ -931,7 +931,7 @@
                   <div>
                     <label
                       class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1"
-                      >Driver Officer Share</label
+                      >Cash Bond — Driver</label
                     >
                     <div class="relative">
                       <span
@@ -952,7 +952,7 @@
                   <div>
                     <label
                       class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1"
-                      >Conductor Officer Share</label
+                      >Cash Bond — Conductor</label
                     >
                     <div class="relative">
                       <span
@@ -1148,13 +1148,13 @@
           </div>
           @if (+selected()!.driver_officer_share > 0 || +selected()!.conductor_officer_share > 0) {
             <div class="pt-1 space-y-1 text-xs">
-              <p class="text-gray-400 font-medium">Officer Shares</p>
+              <p class="text-gray-400 font-medium">Cash Bond</p>
               <div class="flex justify-between">
-                <span class="text-gray-400">Driver Share</span>
+                <span class="text-gray-400">Driver</span>
                 <span class="text-gray-700">{{ selected()!.driver_officer_share | currency: 'PHP' }}</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-400">Conductor Share</span>
+                <span class="text-gray-400">Conductor</span>
                 <span class="text-gray-700">{{ selected()!.conductor_officer_share | currency: 'PHP' }}</span>
               </div>
             </div>

@@ -67,14 +67,23 @@ export class ConductorDashboard implements OnInit {
   // Today's date string for comparison (local calendar date)
   private todayStr = localDateStr(new Date());
 
+  // Today: earliest departure first (trip 1, 2, 3 …)
   todayTrips = computed(() =>
-    this.trips().filter((t) => {
-      if (!t.departure_time) return false;
-      return localDateStr(new Date(t.departure_time)) === this.todayStr;
-    }),
+    this.trips()
+      .filter((t) => {
+        if (!t.departure_time) return false;
+        return localDateStr(new Date(t.departure_time)) === this.todayStr;
+      })
+      .sort((a, b) => new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime()),
   );
 
-  allTrips = computed(() => this.trips());
+  // All: latest schedule first
+  allTrips = computed(() =>
+    [...this.trips()].sort(
+      (a, b) =>
+        new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() || b.id - a.id,
+    ),
+  );
 
   // Tab-scoped list before search/filter
   private tabTrips = computed(() =>
@@ -133,9 +142,20 @@ export class ConductorDashboard implements OnInit {
    * Returns true if this trip can be started right now.
    * Rule: no earlier-numbered trip on the same bus today is still 'scheduled'.
    */
+  /** True while the conductor has a trip in progress today — no other trip can start. */
+  hasOngoingToday = computed(() =>
+    this.trips().some(
+      (t) =>
+        t.status === 'ongoing' &&
+        !!t.departure_time &&
+        localDateStr(new Date(t.departure_time)) === this.todayStr,
+    ),
+  );
+
   canStartTrip = computed(() => {
     const todayStr = this.todayStr;
     const trips = this.trips();
+    const busy = this.hasOngoingToday();
     // Build a set of (bus_id, trip_number) pairs that are still scheduled today
     const scheduledToday = trips.filter(
       (t) =>
@@ -146,7 +166,7 @@ export class ConductorDashboard implements OnInit {
     // For each trip return whether it's the next one to start
     const result = new Map<number, boolean>();
     for (const trip of trips) {
-      if (trip.status !== 'scheduled') {
+      if (trip.status !== 'scheduled' || busy) {
         result.set(trip.id, false);
         continue;
       }

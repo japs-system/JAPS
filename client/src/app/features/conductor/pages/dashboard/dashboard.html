@@ -76,7 +76,7 @@
   </div>
 
   <!-- Search -->
-  <div class="relative flex-1 min-w-[160px]">
+  <div class="relative flex-1 min-w-[220px]">
     <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
     <input
       type="text"
@@ -208,7 +208,11 @@
               @if (!canStartTrip().get(trip.id)) {
                 <p class="text-xs text-gray-400 flex items-center gap-1.5 py-1">
                   <i class="pi pi-lock text-xs"></i>
-                  Complete the previous trip first.
+                  {{
+                    hasOngoingToday()
+                      ? 'Mark your ongoing trip as done first.'
+                      : 'Complete the previous trip first.'
+                  }}
                 </p>
               }
               <div class="flex gap-2">
@@ -385,7 +389,9 @@
                         [disabled]="updatingId() === trip.id || !canStartTrip().get(trip.id)"
                         [title]="
                           !canStartTrip().get(trip.id)
-                            ? 'Complete the previous trip first'
+                            ? hasOngoingToday()
+                              ? 'Mark your ongoing trip as done first'
+                              : 'Complete the previous trip first'
                             : 'Start trip'
                         "
                         class="p-1.5 text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"

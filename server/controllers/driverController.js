@@ -2,7 +2,7 @@ const { Trip, BusInfo, Route, User, Remittance, RemittanceExpense } = require('.
 const { findRemittanceDetail } = require('../services/remittance/findRemittanceDetail');
 
 // GET /api/driver/trips
-// Returns all trips assigned to the logged-in driver
+// Returns the logged-in driver's trips, newest first (latest 500).
 const getAssignedTrips = async (req, res) => {
   try {
     const driverId = req.user.id;
@@ -13,7 +13,8 @@ const getAssignedTrips = async (req, res) => {
         { model: Route, attributes: ['id', 'origin', 'destination', 'distance_km'] },
         { model: User, as: 'conductor', attributes: ['id', 'first_name', 'last_name', 'employee_id', 'contact_number'] },
       ],
-      order: [['departure_time', 'ASC']],
+      order: [['departure_time', 'DESC']],
+      limit: 500,
     });
     return res.json(trips);
   } catch (error) {

@@ -324,11 +324,11 @@
            strokes come out thin or disappear. -->
       <div
         #receiptContent
-        class="bg-white px-2 py-4 font-mono text-xl font-medium text-black space-y-3 max-h-[70vh] overflow-y-auto print:max-h-none print:overflow-visible"
+        class="bg-white px-2 py-4 font-mono text-xl font-normal text-black space-y-3 max-h-[70vh] overflow-y-auto print:max-h-none print:overflow-visible"
       >
         <!-- Store Header -->
         <div class="text-center space-y-1">
-          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-14 mx-auto" />
+          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-10 mx-auto" />
           <p class="text-lg"> {{ lastPrintedTicket()?.date | date: 'medium' }}</p>
         </div>
 
@@ -372,9 +372,11 @@
             <span>PASSENGERS:</span>
             <span class="text-right">{{ lastPrintedTicket()?.passengerCount }}</span>
           </div>
-          <div class="flex justify-between gap-2 text-2xl mt-2 pt-2 border-t-2 border-black">
+          <div
+            class="flex justify-between gap-2 text-2xl font-bold mt-2 pt-2 border-t-2 border-black"
+          >
             <span>TOTAL AMOUNT:</span>
-            <span class="text-right">₱{{ lastPrintedTicket()?.fare | number: '1.2-2' }}</span>
+            <span class="text-right font-bold">₱{{ lastPrintedTicket()?.fare | number: '1.2-2' }}</span>
           </div>
         </div>
 

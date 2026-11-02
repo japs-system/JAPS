@@ -200,7 +200,8 @@ const getAssignedTrips = async (req, res) => {
           attributes: ["id", "first_name", "last_name", "employee_id"],
         },
       ],
-      order: [["departure_time", "ASC"]],
+      order: [["departure_time", "DESC"]],
+      limit: 500,
     });
     return res.json(trips);
   } catch (error) {
@@ -251,12 +252,28 @@ const updateTripStatus = async (req, res) => {
         updateData.departure_time = new Date();
       }
 
-      // Enforce sequential order: no earlier scheduled trip on the same bus today
       const today = new Date();
       const dayStart = new Date(today);
       dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(today);
       dayEnd.setHours(23, 59, 59, 999);
+
+      // Only one trip at a time: the conductor must finish the ongoing trip first
+      const ongoingTrip = await Trip.findOne({
+        where: {
+          conductor_id: conductorId,
+          status: "ongoing",
+          id: { [Op.ne]: trip.id },
+          departure_time: { [Op.between]: [dayStart, dayEnd] },
+        },
+      });
+      if (ongoingTrip) {
+        return res.status(400).json({
+          message: `Trip #${ongoingTrip.trip_number} is still ongoing. Mark it done before starting another trip.`,
+        });
+      }
+
+      // Enforce sequential order: no earlier scheduled trip on the same bus today
 
       const blockers = await Trip.findAll({
         where: {

@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
 import { AlertService } from '../../../../core/services/alert.service';
@@ -42,9 +42,27 @@ export class DriverDashboard implements OnInit {
   private alertService = inject(AlertService);
 
   private readonly API = `${environment.apiUrl}/api/driver`;
+  private readonly PAGE = 12;
 
   trips = signal<Trip[]>([]);
   loading = signal(false);
+
+  /** Latest schedule first (newest departure at the top). */
+  sortedTrips = computed(() =>
+    [...this.trips()].sort(
+      (a, b) =>
+        new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() || b.id - a.id,
+    ),
+  );
+
+  /** Only the newest trips are drawn; "Show more" reveals older ones. */
+  visibleCount = signal(this.PAGE);
+  visibleTrips = computed(() => this.sortedTrips().slice(0, this.visibleCount()));
+  hasMore = computed(() => this.sortedTrips().length > this.visibleCount());
+
+  showMore(): void {
+    this.visibleCount.update((n) => n + this.PAGE);
+  }
 
   ngOnInit(): void {
     this.loadTrips();
@@ -55,6 +73,7 @@ export class DriverDashboard implements OnInit {
     this.http.get<Trip[]>(`${this.API}/trips`, { withCredentials: true }).subscribe({
       next: (data) => {
         this.trips.set(data);
+        this.visibleCount.set(this.PAGE);
         this.loading.set(false);
       },
       error: () => {

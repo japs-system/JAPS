@@ -114,15 +114,15 @@ const fleetUtilisation = ({ busUtilisationRate, totalBuses, busesInUseToday }) =
   if (rate >= 80) {
     return {
       tone: "positive",
-      title: "Fleet is well used today",
-      message: `${busesInUseToday} of ${totalBuses} active buses have run trips today (${rate}%).`,
+      title: "Fleet is well used",
+      message: `On average ${busesInUseToday} of ${totalBuses} active buses ran trips each day in this period (${rate}%).`,
     };
   }
   if (rate < 50) {
     return {
       tone: "warning",
-      title: "Buses sitting idle today",
-      message: `Only ${busesInUseToday} of ${totalBuses} active buses have run trips today (${rate}%). Check schedules and crew assignments.`,
+      title: "Buses sitting idle",
+      message: `Only ${busesInUseToday} of ${totalBuses} active buses ran trips on an average day in this period (${rate}%). Check schedules and crew assignments.`,
     };
   }
   return null;

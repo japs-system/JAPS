@@ -79,7 +79,7 @@ test("flags idle buses and pending remittances", () => {
     busesInUseToday: 2,
     remittancePending: 3,
   });
-  assert.ok(byTitle(insights, "Buses sitting idle today"));
+  assert.ok(byTitle(insights, "Buses sitting idle"));
   assert.match(byTitle(insights, "Remittances awaiting review").message, /3 remittances are/);
 });
 
