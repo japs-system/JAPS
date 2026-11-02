@@ -224,7 +224,7 @@ export class Dashboard implements OnInit {
     const a = this.remittanceApprovedPct();
     const b = a + this.remittanceRejectedPct();
     return `conic-gradient(#22c55e 0% ${a}%, #ef4444 ${a}% ${b}%, #f59e0b ${b}% 100%)`;
-  }); 
+  });
 
   dailyPassengerBars = computed(() => {
     const d = this.dash();
@@ -254,15 +254,22 @@ export class Dashboard implements OnInit {
     this.expandedRoute.set(this.expandedRoute() === id ? null : id);
   }
 
+  /**
+   * Routes with their stops. Every stop that has passengers or revenue is kept
+   * (no cap), sorted by revenue so the biggest earners come first.
+   */
   routeBars = computed(() => {
     const d = this.dash();
     if (!d) return [];
     return d.route_profit.map((r) => {
-      const stops = (r.stops ?? []).map((s) => ({
-        name: s.name,
-        revenue: Number(s.revenue),
-        passengers: Number(s.passengers),
-      }));
+      const stops = (r.stops ?? [])
+        .map((s) => ({
+          name: s.name,
+          revenue: Number(s.revenue),
+          passengers: Number(s.passengers),
+        }))
+        .filter((s) => s.revenue > 0 || s.passengers > 0)
+        .sort((a, b) => b.revenue - a.revenue);
       const maxStop = Math.max(...stops.map((s) => s.revenue), 1);
       return {
         id: r.route_id,
@@ -300,6 +307,20 @@ export class Dashboard implements OnInit {
       .filter((r) => r.total > 0)
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
+  });
+
+  /**
+   * Peak Hours list: top 5 hours from the forecast (sorted, zero hours dropped);
+   * falls back to the selected range's tickets when the forecast has nothing.
+   */
+  peakHoursList = computed(() => {
+    const fromForecast = (this.fore()?.peak_hours_forecast ?? [])
+      .map((r) => ({ hour: Number(r.hour), avg: Number(r.avg_tickets) }))
+      .filter((r) => Number.isFinite(r.avg) && r.avg > 0)
+      .sort((a, b) => b.avg - a.avg)
+      .slice(0, 5);
+    if (fromForecast.length) return fromForecast;
+    return this.peakHoursTop().map((r) => ({ hour: r.hour, avg: r.avg }));
   });
 
   /** Remittances KPI card: approved revenue / cash received are hidden until expanded. */
@@ -353,22 +374,35 @@ export class Dashboard implements OnInit {
   maxRemittanceDaily = computed(() => Math.max(...this.remittanceDailyBars().map((b) => b.value), 1));
 
   /**
-   * Average passengers per day of the week across the selected range
-   * (total for that weekday ÷ how many of that weekday fall in the range),
-   * tagged with a demand factor = that average ÷ the average of all weekdays.
+   * Average passengers per day of the week, tagged with a demand factor
+   * (that average ÷ the average of all weekdays).
+   *
+   * `weekday_weekend` covers the last 12 weeks, so each weekday occurs 12 times.
+   * If it is empty we fall back to the daily totals of the selected range.
+   * `dow` is normalised with % 7 so both 0–6 and 1–7 (Sunday = 7) work.
    */
   dayOfWeekBars = computed(() => {
     const d = this.dash();
     if (!d) return [];
+    const WEEKS = 12;
     const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const totals = Array(7).fill(0);
-    for (const r of d.weekday_weekend) totals[Number(r.dow)] += Number(r.total);
-    const occ = Array(7).fill(0);
-    const to = new Date(`${d.range.to}T00:00:00`);
-    for (let dt = new Date(`${d.range.from}T00:00:00`); dt <= to; dt.setDate(dt.getDate() + 1)) {
-      occ[dt.getDay()]++;
+    let avgs: number[] = Array(7).fill(0);
+
+    if ((d.weekday_weekend ?? []).length) {
+      const totals = Array(7).fill(0);
+      for (const r of d.weekday_weekend) totals[Number(r.dow) % 7] += Number(r.total);
+      avgs = totals.map((t) => t / WEEKS);
+    } else {
+      const totals = Array(7).fill(0);
+      const seen = Array(7).fill(0);
+      for (const r of d.daily_passengers ?? []) {
+        const dow = new Date(`${String(r.date).slice(0, 10)}T00:00:00`).getDay();
+        totals[dow] += Number(r.total);
+        seen[dow]++;
+      }
+      avgs = totals.map((t, i) => (seen[i] ? t / seen[i] : 0));
     }
-    const avgs = totals.map((t, i) => (occ[i] ? t / occ[i] : 0));
+
     const active = avgs.filter((a) => a > 0);
     const mean = active.length ? active.reduce((s, a) => s + a, 0) / active.length : 0;
     return [1, 2, 3, 4, 5, 6, 0].map((i) => ({
@@ -406,60 +440,73 @@ export class Dashboard implements OnInit {
   }
 
   /**
-   * One entry per day of the selected range (actual passengers + approved total revenue).
-   * When the range reaches today, the 7-day forecast is appended after it.
+   * Always 7 actual days ending at the last day that has data (the anchor)
+   * + the next 7 forecast days. Independent of the range filter.
    */
   chartSeries = computed(() => {
-    const d = this.dash();
-    if (!d) return [];
-    const pax = new Map<string, number>(
-      (d.daily_passengers ?? []).map((r) => [String(r.date).slice(0, 10), Number(r.total)]),
-    );
-    const rev = new Map<string, number>(
-      (d.remittance_daily ?? []).map((r) => [String(r.date).slice(0, 10), Number(r.total_revenue)]),
-    );
+    const f = this.fore();
+    if (!f) return [];
+    const anchor = (f.anchor_date ?? this.localKey(new Date())).slice(0, 10);
+
+    const pax = new Map<string, number>();
+    for (const p of f.demand_series ?? []) pax.set(p.date.slice(0, 10), p.value);
+
+    const rev = new Map<string, number>();
+    for (const r of this.dash()?.remittance_daily ?? []) {
+      rev.set(String(r.date).slice(0, 10), Number(r.total_revenue));
+    }
+    for (const p of f.revenue_series ?? []) rev.set(p.date.slice(0, 10), p.value);
+    for (const p of f.revenue_forecast_7d ?? []) {
+      const k = p.date.slice(0, 10);
+      if (!rev.has(k)) rev.set(k, p.predicted);
+    }
+
     const out: {
       date: string;
       type: 'actual' | 'forecast';
       passengers: number;
       revenue: number | null;
     }[] = [];
-    const f = this.fore();
-    // The forecast continues from the last day that has data (falls back to today).
-    const anchor = f?.anchor_date ?? this.localKey(new Date());
-    // Actual days stop at the anchor: later days have no data to show.
-    const lastActual = d.range.to < anchor ? d.range.to : anchor;
-    const to = new Date(`${lastActual}T00:00:00`);
-    for (let dt = new Date(`${d.range.from}T00:00:00`); dt <= to; dt.setDate(dt.getDate() + 1)) {
-      const key = this.localKey(dt);
-      out.push({ date: key, type: 'actual', passengers: pax.get(key) ?? 0, revenue: rev.get(key) ?? 0 });
+
+    // 7 actual days: anchor-6 … anchor
+    const cursor = new Date(`${anchor}T00:00:00`);
+    cursor.setDate(cursor.getDate() - 6);
+    for (let i = 0; i < 7; i++) {
+      const key = this.localKey(cursor);
+      out.push({
+        date: key,
+        type: 'actual',
+        passengers: pax.get(key) ?? 0,
+        revenue: rev.get(key) ?? 0,
+      });
+      cursor.setDate(cursor.getDate() + 1);
     }
-    // Append the forecast only when the selected range contains the anchor day.
-    if (f && d.range.from <= anchor && d.range.to >= anchor) {
-      const frev = new Map<string, number>();
-      for (const p of f.revenue_series ?? []) {
-        if (p.type === 'forecast') frev.set(p.date.slice(0, 10), p.value);
-      }
-      for (const p of f.revenue_forecast_7d ?? []) {
-        if (!frev.has(p.date.slice(0, 10))) frev.set(p.date.slice(0, 10), p.predicted);
-      }
-      for (const p of f.demand_series ?? []) {
+
+    // Next 7 forecast days after the anchor
+    (f.demand_series ?? [])
+      .filter((p) => p.type === 'forecast' && p.date.slice(0, 10) > anchor)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 7)
+      .forEach((p) => {
         const key = p.date.slice(0, 10);
-        if (p.type === 'forecast' && key > anchor) {
-          out.push({ date: key, type: 'forecast', passengers: p.value, revenue: frev.get(key) ?? null });
-        }
-      }
-    }
+        out.push({
+          date: key,
+          type: 'forecast',
+          passengers: p.value,
+          revenue: rev.get(key) ?? null,
+        });
+      });
+
     return out;
   });
 
   /** Label for the divider between actual and forecast: "Today" when data is current. */
   splitLabel = computed(() => {
-    const anchor = this.fore()?.anchor_date;
+    const anchor = this.fore()?.anchor_date?.slice(0, 10);
     return !anchor || anchor === this.localKey(new Date()) ? 'Today' : 'Last data';
   });
 
-  /** True when the selected range has any passengers or approved revenue to draw. */
+  /** True when the chart has any passengers or revenue to draw. */
   hasChartData = computed(() =>
     this.chartSeries().some((p) => p.type === 'actual' && (p.passengers > 0 || (p.revenue ?? 0) > 0)),
   );
