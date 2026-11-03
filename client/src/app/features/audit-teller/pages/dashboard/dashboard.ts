@@ -359,6 +359,15 @@ export class AuditTellerDashboard implements OnInit {
     return { day: list[i], point: this.cashPoints()[i] };
   });
 
+  /** Picks the column under the mouse pointer, so the tooltip follows the cursor on hover. */
+  onCashMove(e: MouseEvent): void {
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const n = this.cashDays().length;
+    if (!n || box.width <= 0) return;
+    const i = Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - box.left) / box.width) * n)));
+    if (i !== this.cashHoverIndex()) this.cashHoverIndex.set(i);
+  }
+
   /** Keeps a tooltip inside the card near the left/right edges. */
   tooltipLeft(xPct: number): number {
     return Math.min(86, Math.max(14, xPct));

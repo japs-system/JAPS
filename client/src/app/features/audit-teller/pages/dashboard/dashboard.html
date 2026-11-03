@@ -165,12 +165,12 @@
             ></div>
           }
 
-          <!-- Hover zones -->
-          <div class="absolute inset-0 flex">
-            @for (b of cashDays(); track b.key; let i = $index) {
-              <div class="flex-1" (mouseenter)="cashHoverIndex.set(i)"></div>
-            }
-          </div>
+          <!-- Hover area: the value shows as the mouse moves over the chart (no click needed) -->
+          <div
+            class="absolute inset-0 cursor-crosshair"
+            (mousemove)="onCashMove($event)"
+            (mouseleave)="cashHoverIndex.set(null)"
+          ></div>
 
           @if (cashHovered(); as h) {
             <div
