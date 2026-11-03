@@ -293,7 +293,7 @@ export class Dashboard implements OnInit {
   // Evenly spaced along the chart's 6 AM – 9 PM axis.
   peakHourLabels = [6, 9, 12, 15, 18, 21];
 
-  /** Busiest hours of the day within the selected range (top 5), from ticket issue times. */
+  /** Busiest hours (4 AM – 9 PM) within the selected range, from ticket issue times. */
   peakHoursTop = computed(() => {
     const d = this.dash();
     if (!d) return [];
@@ -304,23 +304,19 @@ export class Dashboard implements OnInit {
         total: Number(r.ticket_count),
         avg: Number(r.ticket_count) / days,
       }))
-      .filter((r) => r.total > 0)
+      .filter((r) => r.total > 0 && r.hour >= 4 && r.hour <= 21)
       .sort((a, b) => b.total - a.total)
-      .slice(0, 5);
+      .slice(0, 8);
   });
 
-  /**
-   * Peak Hours list: top 5 hours from the forecast (sorted, zero hours dropped);
-   * falls back to the selected range's tickets when the forecast has nothing.
-   */
+  /** Peak Hours list: busiest hours of the range, each rated against the busiest one. */
   peakHoursList = computed(() => {
-    const fromForecast = (this.fore()?.peak_hours_forecast ?? [])
-      .map((r) => ({ hour: Number(r.hour), avg: Number(r.avg_tickets) }))
-      .filter((r) => Number.isFinite(r.avg) && r.avg > 0)
-      .sort((a, b) => b.avg - a.avg)
-      .slice(0, 5);
-    if (fromForecast.length) return fromForecast;
-    return this.peakHoursTop().map((r) => ({ hour: r.hour, avg: r.avg }));
+    const rows = this.peakHoursTop();
+    const max = Math.max(...rows.map((r) => r.avg), 0);
+    return rows.map((r) => {
+      const share = max > 0 ? r.avg / max : 0;
+      return { hour: r.hour, avg: r.avg, pct: share * 100, level: this.peakLevelByShare(share) };
+    });
   });
 
   /** Remittances KPI card: approved revenue / cash received are hidden until expanded. */
@@ -610,14 +606,12 @@ export class Dashboard implements OnInit {
     return `${h12}:00 ${h >= 12 ? 'PM' : 'AM'}`;
   }
 
-  peakLevel(rank: number): { label: string; cls: string } {
-    return (
-      [
-        { label: 'Very High', cls: 'text-red-600 font-bold' },
-        { label: 'High', cls: 'text-orange-500 font-semibold' },
-        { label: 'Moderate', cls: 'text-amber-500 font-medium' },
-      ][rank] ?? { label: 'Moderate', cls: 'text-amber-500 font-medium' }
-    );
+  /** Very High ≥ 75% of the busiest hour, High ≥ 50%, Moderate ≥ 25%, otherwise Low. */
+  peakLevelByShare(share: number): { label: string; cls: string; bar: string } {
+    if (share >= 0.75) return { label: 'Very High', cls: 'text-red-600 font-bold', bar: 'bg-red-500' };
+    if (share >= 0.5) return { label: 'High', cls: 'text-orange-500 font-semibold', bar: 'bg-orange-400' };
+    if (share >= 0.25) return { label: 'Moderate', cls: 'text-amber-500 font-medium', bar: 'bg-amber-400' };
+    return { label: 'Low', cls: 'text-gray-400 font-medium', bar: 'bg-gray-300' };
   }
 
   // ── Growth vs previous period (KPI cards) ─────────────────────────────────
