@@ -28,7 +28,7 @@ export class DriverLayout {
 
   navItems: NavItem[] = [
     { label: 'My Schedule', shortLabel: 'Schedule', icon: 'pi-calendar', route: 'dashboard' },
-    { label: 'My Remittances', shortLabel: 'Remit', icon: 'pi-file-check', route: 'remittances' },
+    { label: 'My Remittances', shortLabel: 'Remittance', icon: 'pi-file-check', route: 'remittances' },
   ];
 
   /** First letters of the first and last name, for the header avatar. */
