@@ -162,7 +162,7 @@ export class AuditTellerDashboard implements OnInit {
   // ── Chart buckets ───────────────────────────────────────────────────────
   // Submitted vs Reviewed follows the selected range and picks a column size that
   // keeps the bars wide: days (≤ 14 days), weeks (≤ 120 days), otherwise months.
-  // The Cash Remitted trend is always the last 14 days.
+  // The Cash Remitted trend uses the same columns.
   private bucketize(from: string, to: string): { list: Bucket[]; index: Map<string, Bucket> } {
     const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -263,15 +263,8 @@ export class AuditTellerDashboard implements OnInit {
     return list;
   });
 
-  /** Columns for the Cash Remitted trend: always the last 14 days. */
-  cashDays = computed<Bucket[]>(() => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 13);
-    const { list, index } = this.bucketize(this.localDateStr(start), this.localDateStr(today));
-    this.fillBuckets(index);
-    return list;
-  });
+  /** Columns for the Cash Remitted trend: same columns as the selected range (days, weeks or months). */
+  cashDays = computed<Bucket[]>(() => this.buckets());
 
   /** Axis labels for Submitted vs Reviewed: with many columns only some labels show. */
   labelStep = computed(() => Math.ceil(this.buckets().length / 10));
@@ -336,7 +329,7 @@ export class AuditTellerDashboard implements OnInit {
       ).length,
   );
 
-  // ── Cash remitted line chart, last 14 days (points sit at the centre of each hover zone) ──
+  // ── Cash remitted line chart, selected range (points sit at the centre of each hover zone) ──
   private readonly CHART_W = 400;
   cashTotal = computed(() => this.cashDays().reduce((sum, d) => sum + d.cashRemitted, 0));
   cashPoints = computed(() => {

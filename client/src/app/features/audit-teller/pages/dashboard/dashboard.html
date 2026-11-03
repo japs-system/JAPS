@@ -124,7 +124,7 @@
   <div class="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm p-5">
     <div class="flex items-start justify-between gap-2 mb-4">
       <div>
-        <h3 class="text-sm font-semibold text-gray-800">Cash Remitted Trend — Last 14 Days</h3>
+        <h3 class="text-sm font-semibold text-gray-800">Cash Remitted Trend</h3>
         <p class="text-xs text-gray-400 mt-0.5">Cash received on approved remittances</p>
       </div>
       <span class="flex items-center gap-1.5 text-xs text-gray-500 shrink-0"
@@ -189,25 +189,29 @@
           }
         </div>
 
-        <!-- Day-of-week labels, one per hover zone -->
+        <!-- Axis labels, one per hover zone (with many columns only some labels show) -->
         <div class="flex mt-2">
-          @for (b of cashDays(); track b.key) {
-            <div class="flex-1 text-center leading-tight">
-              <div
-                class="text-[10px] font-semibold"
-                [class.text-sky-500]="b.weekend"
-                [class.text-gray-500]="!b.weekend"
-              >
-                {{ b.dow }}
-              </div>
-              <div class="text-[9px] text-gray-400">{{ b.short }}</div>
+          @for (b of cashDays(); track b.key; let i = $index) {
+            <div class="flex-1 text-center leading-tight whitespace-nowrap">
+              @if (i % labelStep() === 0) {
+                @if (b.dow) {
+                  <div
+                    class="text-[10px] font-semibold"
+                    [class.text-sky-500]="b.weekend"
+                    [class.text-gray-500]="!b.weekend"
+                  >
+                    {{ b.dow }}
+                  </div>
+                }
+                <div class="text-[9px] text-gray-400">{{ b.short }}</div>
+              }
             </div>
           }
         </div>
       </div>
     } @else {
       <div class="flex items-center justify-center h-36 text-gray-300 text-sm">
-        No cash remitted in the last 14 days
+        No cash remitted in this range
       </div>
     }
   </div>

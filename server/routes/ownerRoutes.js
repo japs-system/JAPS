@@ -190,17 +190,17 @@ router.get("/dashboard", async (req, res) => {
       },
     );
 
-    // Revenue per boarding stop of each route (ticket fares), for the dropdown.
+    // Revenue per stop (where passengers get off) of each route, from ticket fares, for the dropdown.
     const stopRevenue = await sequelize.query(
       `SELECT t.route_id,
-              COALESCE(NULLIF(tk.boarding_point, ''), 'Unknown') AS stop,
+              COALESCE(NULLIF(tk.dropping_point, ''), 'Unknown') AS stop,
               SUM(tk.fare) AS revenue,
               SUM(COALESCE(tk.passenger_count, 1)) AS passengers
        FROM tickets tk
        JOIN trips t ON t.id = tk.trip_id
        WHERE t.status = 'completed'
          AND t.departure_time BETWEEN :start AND :end
-       GROUP BY t.route_id, COALESCE(NULLIF(tk.boarding_point, ''), 'Unknown')
+       GROUP BY t.route_id, COALESCE(NULLIF(tk.dropping_point, ''), 'Unknown')
        ORDER BY revenue DESC`,
       {
         replacements: { start: rangeStart, end: rangeEnd },
@@ -217,19 +217,17 @@ router.get("/dashboard", async (req, res) => {
     }
     for (const r of routeProfit) r.stops = stopsByRoute[r.route_id] ?? [];
 
-    // ── Peak hour analysis (last 30 days) ─────────────────────────────────
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(now.getDate() - 30);
+    // ── Peak hour analysis (selected range, Manila time, 4 AM – 9 PM) ─────
     const peakHoursRaw = await sequelize.query(
       `SELECT EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila')::int AS hour,
               SUM(COALESCE(passenger_count, 1)) AS ticket_count
        FROM tickets
-       WHERE issued_at >= :since
+       WHERE issued_at BETWEEN :start AND :end
          AND EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila') BETWEEN 4 AND 21
        GROUP BY EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila')::int
        ORDER BY hour ASC`,
       {
-        replacements: { since: thirtyDaysAgo },
+        replacements: { start: rangeStart, end: rangeEnd },
         type: sequelize.QueryTypes.SELECT,
       },
     );
