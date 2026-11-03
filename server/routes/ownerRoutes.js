@@ -221,11 +221,12 @@ router.get("/dashboard", async (req, res) => {
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(now.getDate() - 30);
     const peakHoursRaw = await sequelize.query(
-      `SELECT EXTRACT(HOUR FROM issued_at)::int AS hour,
+      `SELECT EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila')::int AS hour,
               SUM(COALESCE(passenger_count, 1)) AS ticket_count
        FROM tickets
        WHERE issued_at >= :since
-       GROUP BY EXTRACT(HOUR FROM issued_at)::int
+         AND EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila') BETWEEN 4 AND 21
+       GROUP BY EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila')::int
        ORDER BY hour ASC`,
       {
         replacements: { since: thirtyDaysAgo },
@@ -609,12 +610,13 @@ router.get("/forecast", async (req, res) => {
       `SELECT sub.hour,
               AVG(sub.daily_count) AS avg_tickets
        FROM (
-         SELECT DATE(issued_at) AS day,
-                EXTRACT(HOUR FROM issued_at)::int AS hour,
+         SELECT DATE(issued_at AT TIME ZONE 'Asia/Manila') AS day,
+                EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila')::int AS hour,
                 SUM(COALESCE(passenger_count, 1)) AS daily_count
          FROM tickets
          WHERE issued_at >= :since
-         GROUP BY DATE(issued_at), EXTRACT(HOUR FROM issued_at)
+           AND EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila') BETWEEN 4 AND 21
+         GROUP BY DATE(issued_at AT TIME ZONE 'Asia/Manila'), EXTRACT(HOUR FROM issued_at AT TIME ZONE 'Asia/Manila')
        ) sub
        GROUP BY sub.hour
        ORDER BY avg_tickets DESC
