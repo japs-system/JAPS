@@ -173,52 +173,24 @@ router.get("/dashboard", async (req, res) => {
       },
     );
 
-    // ── Route profitability within the range (approved remittances) ───────
-    // Revenue per route = total revenue (net collection + cash deposit) of the
-    // APPROVED remittances dated in the range, attributed to the routes of the
-    // trips in each remittance. When one remittance covers trips on several
-    // routes, its total is split in proportion to each route's trip totals
-    // (or its trip count if those totals are all zero).
+    // ── Route profitability within the range (via completed trips) ────────
     const routeProfit = await sequelize.query(
-      `WITH trip_share AS (
-         SELECT t.remittance_id, t.route_id,
-                SUM(t.grand_total) AS route_gross,
-                COUNT(t.id) AS trips
-         FROM trips t
-         JOIN remittances rm ON rm.id = t.remittance_id
-         WHERE rm.status = 'approved'
-           AND rm.date BETWEEN :from AND :to
-           AND t.status <> 'cancelled'
-         GROUP BY t.remittance_id, t.route_id
-       ),
-       remit_totals AS (
-         SELECT remittance_id,
-                SUM(route_gross) AS gross_all,
-                SUM(trips) AS trips_all
-         FROM trip_share
-         GROUP BY remittance_id
-       )
-       SELECT ts.route_id, r.origin, r.destination,
-              SUM((rm.net_collection + rm.cash_deposit) *
-                  CASE WHEN rt.gross_all > 0
-                       THEN ts.route_gross / rt.gross_all
-                       ELSE ts.trips::numeric / rt.trips_all
-                  END) AS revenue,
-              SUM(ts.trips) AS trip_count
-       FROM trip_share ts
-       JOIN remit_totals rt ON rt.remittance_id = ts.remittance_id
-       JOIN remittances rm ON rm.id = ts.remittance_id
-       JOIN routes r ON r.id = ts.route_id
-       GROUP BY ts.route_id, r.origin, r.destination
+      `SELECT t.route_id, r.origin, r.destination,
+              SUM(t.grand_total) AS revenue,
+              COUNT(t.id) AS trip_count
+       FROM trips t
+       JOIN routes r ON r.id = t.route_id
+       WHERE t.status = 'completed'
+         AND t.departure_time BETWEEN :start AND :end
+       GROUP BY t.route_id, r.origin, r.destination
        ORDER BY revenue DESC`,
       {
-        replacements: { from: rangeFromKey, to: rangeToKey },
+        replacements: { start: rangeStart, end: rangeEnd },
         type: sequelize.QueryTypes.SELECT,
       },
     );
 
-    // Revenue per stop (where passengers get off) of each route, from ticket
-    // fares, for the dropdown. Limited to trips of the same approved remittances.
+    // Revenue per stop (where passengers get off) of each route, from ticket fares, for the dropdown.
     const stopRevenue = await sequelize.query(
       `SELECT t.route_id,
               COALESCE(NULLIF(tk.dropping_point, ''), 'Unknown') AS stop,
@@ -226,14 +198,12 @@ router.get("/dashboard", async (req, res) => {
               SUM(COALESCE(tk.passenger_count, 1)) AS passengers
        FROM tickets tk
        JOIN trips t ON t.id = tk.trip_id
-       JOIN remittances rm ON rm.id = t.remittance_id
-       WHERE rm.status = 'approved'
-         AND rm.date BETWEEN :from AND :to
-         AND t.status <> 'cancelled'
+       WHERE t.status = 'completed'
+         AND t.departure_time BETWEEN :start AND :end
        GROUP BY t.route_id, COALESCE(NULLIF(tk.dropping_point, ''), 'Unknown')
        ORDER BY revenue DESC`,
       {
-        replacements: { from: rangeFromKey, to: rangeToKey },
+        replacements: { start: rangeStart, end: rangeEnd },
         type: sequelize.QueryTypes.SELECT,
       },
     );
@@ -923,6 +893,145 @@ function buildDailySheet(wb, rows, day) {
   note.getCell(1).font = { italic: true, color: { argb: "FF6B7280" } };
 }
 
+// ── Daily sheet: one row per day, one column per bus (Total Revenue of the
+// approved remittance), then TOTAL, DAILY EXPENSES, NET COLLECTION, NSE, CASH LEFT.
+const dayList = (from, to) => {
+  const out = [];
+  for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1))
+    out.push(d.toISOString().slice(0, 10));
+  return out;
+};
+const BLUE = { argb: "FF0070C0" };
+const THIN = { style: "thin" };
+const BOX = { top: THIN, bottom: THIN, left: THIN, right: THIN };
+const ACCT = '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-';
+
+function buildMonthlyDailySheet(wb, approved, from, to) {
+  const ws = wb.addWorksheet("Daily", { views: [{ state: "frozen", xSplit: 1, ySplit: 3 }] });
+  const days = dayList(from, to);
+  const busMap = new Map();
+  approved.forEach((r) => {
+    if (r.BusModel && !busMap.has(r.BusModel.id)) busMap.set(r.BusModel.id, r.BusModel.bus_number);
+  });
+  const buses = [...busMap.entries()].sort((a, b) => a[0] - b[0]);
+  const nb = buses.length;
+  const cTotal = nb + 2, cExp = nb + 3, cNet = nb + 4, cNse = nb + 5, cLeft = nb + 6;
+  const L = (n) => ws.getColumn(n).letter;
+
+  const heads = ["DAY", ...buses.map((b) => Number(b[1]) || b[1]), "TOTAL", "DAILY EXPENSES", "NET COLLECTION", "NSE", "CASH LEFT"];
+  const hr = ws.getRow(3);
+  heads.forEach((h, i) => {
+    const c = hr.getCell(i + 1);
+    c.value = h;
+    c.font = { bold: true, color: BLUE };
+    c.alignment = { horizontal: "center" };
+    c.border = BOX;
+  });
+  ws.getColumn(1).width = 8;
+  for (let i = 2; i <= cLeft; i++) ws.getColumn(i).width = i > nb + 1 ? 16 : 12;
+
+  const cell = {}; // `${day}|${busId}` -> total revenue
+  const exp = {};
+  approved.forEach((r) => {
+    const d = dateKey(r.date);
+    const k = `${d}|${r.BusModel ? r.BusModel.id : ""}`;
+    cell[k] = (cell[k] || 0) + num(r.net_collection) + num(r.cash_deposit);
+    exp[d] = (exp[d] || 0) + num(r.total_expenses);
+  });
+
+  const first = 4, last = first + days.length - 1;
+  days.forEach((d, i) => {
+    const rn = first + i;
+    const row = ws.getRow(rn);
+    row.getCell(1).value = Number(d.slice(8));
+    row.getCell(1).font = { bold: true };
+    let tot = 0;
+    buses.forEach(([id], j) => {
+      const v = cell[`${d}|${id}`] || 0;
+      tot += v;
+      row.getCell(j + 2).value = v;
+    });
+    const e = exp[d] || 0;
+    row.getCell(cTotal).value = { formula: `SUM(B${rn}:${L(nb + 1)}${rn})`, result: tot };
+    row.getCell(cExp).value = e || null;
+    row.getCell(cNet).value = { formula: `SUM(${L(cTotal)}${rn}-${L(cExp)}${rn})`, result: tot - e };
+    row.getCell(cLeft).value = { formula: `SUM(${L(cNet)}${rn}-${L(cNse)}${rn})`, result: tot - e };
+    for (let c = 1; c <= cLeft; c++) {
+      const x = row.getCell(c);
+      x.border = BOX;
+      x.alignment = { horizontal: "center" };
+      if (c > 1) x.numFmt = ACCT;
+    }
+  });
+
+  const tr = ws.getRow(last + 2);
+  tr.getCell(1).value = "Total";
+  for (let c = 2; c <= cLeft; c++) {
+    if (c === cExp) continue;
+    let result = 0;
+    for (let r = first; r <= last; r++) {
+      const v = ws.getRow(r).getCell(c).value;
+      result += v && typeof v === "object" ? v.result : Number(v) || 0;
+    }
+    tr.getCell(c).value = { formula: `SUM(${L(c)}${first}:${L(c)}${last})`, result };
+  }
+  tr.getCell(cExp).value = { formula: `SUM(${L(cExp)}${first}:${L(cExp)}${last})`, result: Object.values(exp).reduce((a, b) => a + b, 0) };
+  for (let c = 1; c <= cLeft; c++) {
+    const x = tr.getCell(c);
+    x.font = { bold: true };
+    x.border = BOX;
+    x.alignment = { horizontal: "center" };
+    if (c > 1) x.numFmt = ACCT;
+  }
+}
+
+// ── Attendance sheet: drivers then conductors, "/" on every day they have an
+// approved remittance. Employee numbers are EMP-### from the user id.
+function buildAttendanceSheet(wb, approved, from, to) {
+  const ws = wb.addWorksheet("Attendance");
+  const days = dayList(from, to);
+  ws.getColumn(1).width = 13.9;
+  ws.getColumn(2).width = 16;
+  ws.getColumn(3).width = 14;
+  days.forEach((d, i) => {
+    const c = ws.getRow(2).getCell(4 + i);
+    c.value = Number(d.slice(8));
+    c.alignment = { horizontal: "center" };
+    ws.getColumn(4 + i).width = 3.7;
+  });
+  const emp = { driver: new Map(), conductor: new Map() };
+  approved.forEach((r) => {
+    ["driver", "conductor"].forEach((role) => {
+      const u = r[role];
+      if (!u) return;
+      const e = emp[role].get(u.id) || { u, days: new Set() };
+      e.days.add(dateKey(r.date));
+      emp[role].set(u.id, e);
+    });
+  });
+  let rn = 3;
+  [["DRIVERS", "driver"], ["CONDUCTORS", "conductor"]].forEach(([title, role]) => {
+    const h = ws.getRow(rn++);
+    h.getCell(1).value = title;
+    h.getCell(1).font = { bold: true, color: BLUE };
+    [...emp[role].values()]
+      .sort((a, b) => String(a.u.last_name).localeCompare(String(b.u.last_name)))
+      .forEach((e) => {
+        const row = ws.getRow(rn++);
+        row.getCell(1).value = `EMP-${String(e.u.id).padStart(3, "0")}`;
+        row.getCell(2).value = e.u.first_name;
+        row.getCell(3).value = e.u.last_name;
+        days.forEach((d, i) => {
+          const c = row.getCell(4 + i);
+          if (e.days.has(d)) c.value = "/";
+          c.border = BOX;
+          c.alignment = { horizontal: "center" };
+        });
+      });
+    rn++;
+  });
+}
+
 function readRange(req, res) {
   const { from, to } = req.query;
   if (!isDay(from) || !isDay(to) || from > to) {
@@ -982,9 +1091,7 @@ router.get("/reports/remittances", async (req, res) => {
     ws1.getCell("A1").font = { bold: true, size: 16 };
     ws1.mergeCells("A2:B2");
     ws1.getCell("A2").value =
-      range.from === range.to
-        ? `Date: ${range.from}  ·  Approved remittances only`
-        : `Period: ${range.from} to ${range.to}  ·  Approved remittances only`;
+      range.from === range.to ? `Date: ${range.from}` : `Period: ${range.from} to ${range.to}`;
     ws1.getCell("A2").font = { italic: true, color: GREY };
     ws1.addRow([]);
 
@@ -1021,10 +1128,6 @@ router.get("/reports/remittances", async (req, res) => {
     line("Less: total expenses", summary.total_expenses, PESO);
     line("Net gross", summary.net_gross, PESO);
 
-    section("Commissions");
-    line("Driver commission", summary.driver_commission, WHOLE);
-    line("Conductor commission", summary.conductor_commission, WHOLE);
-
     section("Collection");
     line("Net collection", summary.net_collection, PESO);
     line("Cash deposit", summary.cash_deposit, PESO);
@@ -1038,97 +1141,9 @@ router.get("/reports/remittances", async (req, res) => {
       PESO,
     );
 
-    ws1.addRow([]);
-    const note = ws1.addRow([
-      `Not included in the totals: ${summary.pending} pending, ${summary.rejected} rejected.`,
-    ]);
-    ws1.mergeCells(note.number, 1, note.number, 2);
-    note.getCell(1).font = { italic: true, color: GREY };
-
     if (!isDaily) {
-    // ── Sheet 2: Remittances (all statuses) ───────────────────────────────
-    const ws2 = wb.addWorksheet("Remittances", { views: [{ state: "frozen", ySplit: 1 }] });
-    ws2.columns = [
-      { header: "ID", key: "id", width: 8 },
-      { header: "Date", key: "date", width: 13 },
-      { header: "Status", key: "status", width: 12 },
-      { header: "Bus", key: "bus", width: 12 },
-      { header: "Conductor", key: "conductor", width: 22 },
-      { header: "Driver", key: "driver", width: 22 },
-      { header: "Trips", key: "trips", width: 8 },
-      { header: "Gross Income", key: "gross", width: 16 },
-      { header: "Expenses", key: "exp", width: 14 },
-      { header: "Net Gross", key: "netGross", width: 16 },
-      { header: "Driver Commission", key: "dc", width: 18 },
-      { header: "Conductor Commission", key: "cc", width: 20 },
-      { header: "Net Collection", key: "nc", width: 16 },
-      { header: "Cash Deposit", key: "cd", width: 15 },
-      { header: "Total Revenue", key: "rev", width: 16 },
-      { header: "Cash Remitted", key: "cr", width: 16 },
-      { header: "Approved By", key: "by", width: 20 },
-    ];
-    styleHeader(ws2.getRow(1), 17);
-    const statusLabel = { submitted: "Pending", approved: "Approved", rejected: "Rejected" };
-    for (const r of rows) {
-      ws2.addRow({
-        id: r.id,
-        date: r.date,
-        status: statusLabel[r.status] || r.status,
-        bus: r.BusModel ? r.BusModel.bus_number : "",
-        conductor: fullName(r.conductor),
-        driver: fullName(r.driver),
-        trips: num(r.no_of_trips),
-        gross: num(r.gross_income),
-        exp: num(r.total_expenses),
-        netGross: num(r.gross_income) - num(r.total_expenses),
-        dc: Math.round(num(r.driver_commission)),
-        cc: Math.round(num(r.conductor_commission)),
-        nc: num(r.net_collection),
-        cd: num(r.cash_deposit),
-        rev: num(r.net_collection) + num(r.cash_deposit),
-        cr: r.cash_received == null ? null : num(r.cash_received),
-        by: fullName(r.approver),
-      });
-    }
-    ["gross", "exp", "netGross", "dc", "cc", "nc", "cd", "rev", "cr"].forEach((k) => {
-      ws2.getColumn(k).numFmt = PESO;
-    });
-    ws2.autoFilter = { from: "A1", to: "Q1" };
-
-    // ── Sheet 3: Daily (approved only) ────────────────────────────────────
-    const ws3 = wb.addWorksheet("Daily", { views: [{ state: "frozen", ySplit: 1 }] });
-    ws3.columns = [
-      { header: "Date", key: "date", width: 14 },
-      { header: "Remittances", key: "count", width: 14 },
-      { header: "Net Collection", key: "nc", width: 18 },
-      { header: "Cash Deposit", key: "cd", width: 16 },
-      { header: "Total Revenue", key: "rev", width: 18 },
-    ];
-    styleHeader(ws3.getRow(1), 5);
-    const byDay = new Map();
-    for (const r of approved) {
-      const k = dateKey(r.date);
-      const d = byDay.get(k) || { count: 0, nc: 0, cd: 0 };
-      d.count += 1;
-      d.nc += num(r.net_collection);
-      d.cd += num(r.cash_deposit);
-      byDay.set(k, d);
-    }
-    for (const [k, d] of [...byDay.entries()].sort()) {
-      ws3.addRow({ date: k, count: d.count, nc: d.nc, cd: d.cd, rev: d.nc + d.cd });
-    }
-    ["nc", "cd", "rev"].forEach((k) => (ws3.getColumn(k).numFmt = PESO));
-    if (byDay.size) {
-      const t = ws3.addRow({
-        date: "Total",
-        count: summary.remittances,
-        nc: summary.net_collection,
-        cd: summary.cash_deposit,
-        rev: summary.total_revenue,
-      });
-      t.font = { bold: true };
-    }
-
+      buildMonthlyDailySheet(wb, approved, range.from, range.to);
+      buildAttendanceSheet(wb, approved, range.from, range.to);
     }
 
     const fileName = isDaily

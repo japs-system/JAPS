@@ -300,6 +300,9 @@ export class Dashboard implements OnInit {
     });
   });
 
+  /** Peak Hours card: only the busiest hour shows until the other peak hours are expanded. */
+  peakHoursOpen = signal(false);
+
   /** Remittances KPI card: approved revenue / cash received are hidden until expanded. */
   remittanceOpen = signal(false);
 
