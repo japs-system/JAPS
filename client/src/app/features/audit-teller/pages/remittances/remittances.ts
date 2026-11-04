@@ -70,24 +70,25 @@ export class RemittancesPage implements OnInit {
   filtered = computed(() => {
     const q = this.search().toLowerCase().trim();
     const status = this.statusFilter();
-    // Range comes from the Dashboard; today's remittances when none was chosen there.
+    // Range comes from the Dashboard (today's remittances when none was chosen there).
+    // While the teller is typing in the search box, the whole history is searched instead,
+    // so a name or bus is found even when it is outside the selected range.
     const { from, to } = this.rangeState.remittanceRange();
 
     return this.allRemittances().filter((r) => {
       const matchSearch =
         !q ||
-        r.conductor.first_name.toLowerCase().includes(q) ||
-        r.conductor.last_name.toLowerCase().includes(q) ||
-        r.conductor.employee_id.toLowerCase().includes(q) ||
-        r.driver.first_name.toLowerCase().includes(q) ||
-        r.driver.last_name.toLowerCase().includes(q) ||
-        r.BusModel.bus_number.toLowerCase().includes(q) ||
-        r.BusModel.plate_number.toLowerCase().includes(q);
-      const matchStatus = status === 'all' || r.status === status;
+        `${r.conductor.first_name} ${r.conductor.last_name}`.toLowerCase().includes(q) ||
+        `${r.driver.first_name} ${r.driver.last_name}`.toLowerCase().includes(q) ||
+        (r.conductor.employee_id ?? '').toLowerCase().includes(q) ||
+        (r.driver.employee_id ?? '').toLowerCase().includes(q) ||
+        String(r.BusModel.bus_number).toLowerCase().includes(q) ||
+        String(r.BusModel.plate_number).toLowerCase().includes(q);
 
+      const matchStatus = status === 'all' || r.status === status;
       // r.date is a plain YYYY-MM-DD, so compare as strings (no timezone shifts).
       const day = String(r.date).slice(0, 10);
-      const inRange = day >= from && day <= to;
+      const inRange = q !== '' || (day >= from && day <= to);
 
       return matchSearch && matchStatus && inRange;
     });
