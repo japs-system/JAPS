@@ -455,11 +455,11 @@ const createTrip = async (req, res) => {
 // POST /api/buses/trips/bulk
 const createTripsBulk = async (req, res) => {
   try {
-    const { bus_id, date, trips } = req.body;
+    const { bus_id, trips } = req.body;
 
-    if (!bus_id || !date || !Array.isArray(trips) || trips.length === 0) {
+    if (!bus_id || !Array.isArray(trips) || trips.length === 0) {
       return res.status(400).json({
-        message: "Please provide a bus, schedule date, and at least one trip.",
+        message: "Please provide a bus and at least one trip.",
       });
     }
 
@@ -482,17 +482,6 @@ const createTripsBulk = async (req, res) => {
       });
     }
 
-    const dateValue = String(date).slice(0, 10);
-
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(dateValue) ||
-      Number.isNaN(new Date(`${dateValue}T00:00:00`).getTime())
-    ) {
-      return res.status(400).json({
-        message: "Invalid schedule date.",
-      });
-    }
-
     // Validate all rows before creating any trip.
     const parsedTrips = [];
     const requestedSlots = new Set();
@@ -507,10 +496,7 @@ const createTripsBulk = async (req, res) => {
       }
 
       const departureDate = new Date(trip.departure_time);
-      if (
-        String(trip.departure_time).slice(0, 10) !== dateValue ||
-        Number.isNaN(departureDate.getTime())
-      ) {
+      if (Number.isNaN(departureDate.getTime())) {
         return res.status(400).json({
           message: `Trip ${i + 1} has an invalid departure date or time.`,
         });
@@ -527,6 +513,7 @@ const createTripsBulk = async (req, res) => {
       parsedTrips.push({
         route_id: Number(trip.route_id),
         departure_time: departureDate,
+        date_key: String(trip.departure_time).slice(0, 10),
       });
     }
 
@@ -568,41 +555,60 @@ const createTripsBulk = async (req, res) => {
       });
     }
 
-    // Get the next trip number for this bus and date.
-    const dayStart = new Date(`${dateValue}T00:00:00`);
-    const dayEnd = new Date(`${dateValue}T23:59:59.999`);
-
-    const existing = await Trip.findAll({
-      where: {
-        bus_id,
-        departure_time: {
-          [Op.between]: [dayStart, dayEnd],
-        },
-      },
-      order: [["trip_number", "DESC"]],
-      limit: 1,
-    });
-
-    let nextTripNumber =
-      existing.length > 0
-        ? Number(existing[0].trip_number) + 1
-        : 1;
-
+    // Assign trip numbers separately for each departure date.
+    // Each date starts after the last trip number already saved for that day.
+    const nextTripNumberByDate = new Map();
     const created = [];
 
     for (const tripData of parsedTrips) {
+      const departureDate = tripData.departure_time;
+      const dateKey = tripData.date_key;
+
+      if (!nextTripNumberByDate.has(dateKey)) {
+        const dayStart = new Date(departureDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(departureDate);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const existing = await Trip.findAll({
+          where: {
+            bus_id,
+            departure_time: { [Op.between]: [dayStart, dayEnd] },
+          },
+          order: [["trip_number", "DESC"]],
+          limit: 1,
+        });
+
+        nextTripNumberByDate.set(
+          dateKey,
+          existing.length > 0 ? Number(existing[0].trip_number) + 1 : 1,
+        );
+      }
+
+      const tripNumber = nextTripNumberByDate.get(dateKey);
       const trip = await Trip.create({
         bus_id,
         route_id: tripData.route_id,
         driver_id,
         conductor_id,
-        trip_number: nextTripNumber++,
-        departure_time: tripData.departure_time,
+        trip_number: tripNumber,
+        departure_time: departureDate,
         status: "scheduled",
       });
 
+      nextTripNumberByDate.set(dateKey, tripNumber + 1);
       created.push(trip);
     }
+
+    const uniqueDepartureDates = [
+      ...new Set(
+        created.map((trip) => formatDate(trip.departure_time)),
+      ),
+    ];
+    const notificationDateLabel =
+      uniqueDepartureDates.length === 1
+        ? uniqueDepartureDates[0]
+        : `${uniqueDepartureDates.length} different dates`;
 
     // Send notifications after the trips have been saved.
     notify(
@@ -642,7 +648,7 @@ const createTripsBulk = async (req, res) => {
               count === 1
                 ? "New schedule assigned"
                 : `${count} new trips scheduled`,
-            message: `Bus ${busLabel} on ${formatDate(dateValue)}: ${count} trip${count === 1 ? "" : "s"}, first departure at ${formatTime(created[0].departure_time)}.`,
+            message: `Bus ${busLabel}: ${count} trip${count === 1 ? "" : "s"} scheduled across ${notificationDateLabel}. First departure: ${formatDate(created[0].departure_time)} at ${formatTime(created[0].departure_time)}.`,
             link,
           });
         }
@@ -655,7 +661,7 @@ const createTripsBulk = async (req, res) => {
               to: person.email,
               name: fullName(person),
               busLabel,
-              date: dateValue,
+              date: created[0].departure_time,
               trips: tripSummaries,
             }),
           );
@@ -663,7 +669,7 @@ const createTripsBulk = async (req, res) => {
 
         await notifyManagementOfSchedule({
           busLabel,
-          date: dateValue,
+          date: created[0].departure_time,
           driver,
           conductor,
           trips: tripSummaries,

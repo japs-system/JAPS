@@ -235,9 +235,12 @@ export class Schedules implements OnInit {
       if (last?.departure_time) {
         const d = new Date(last.departure_time);
         d.setHours(d.getHours() + 1);
+        const yyyy = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
         const hh = String(d.getHours()).padStart(2, '0');
         const mm = String(d.getMinutes()).padStart(2, '0');
-        nextTime = `${this.scheduleDate()}T${hh}:${mm}`;
+        nextTime = `${yyyy}-${month}-${day}T${hh}:${mm}`;
       }
       return [...rows, { route_id: last?.route_id ?? null, departure_time: nextTime }];
     });
@@ -274,12 +277,8 @@ export class Schedules implements OnInit {
     const bus = this.selectedBus();
     if (!bus) return false;
     if (!this.getSelectedDriverId() || !this.getSelectedConductorId()) return false;
-    if (!this.scheduleDate() || this.tripRows().length === 0) return false;
-    return this.tripRows().every((r) => {
-      if (!r.route_id || !r.departure_time) return false;
-      const departureDate = r.departure_time.slice(0, 10);
-      return departureDate === this.scheduleDate();
-    });
+    if (this.tripRows().length === 0) return false;
+    return this.tripRows().every((r) => !!r.route_id && !!r.departure_time);
   }
 
   save(): void {
@@ -295,12 +294,12 @@ export class Schedules implements OnInit {
       this.alertService.error('Error', 'Please assign both a driver and a conductor to this bus first.');
       return;
     }
-    if (!this.scheduleDate() || this.tripRows().length === 0) {
-      this.alertService.error('Error', 'Please select a date and add at least one trip.');
+    if (this.tripRows().length === 0) {
+      this.alertService.error('Error', 'Please add at least one trip.');
       return;
     }
-    if (!this.tripRows().every((r) => !!r.route_id && !!r.departure_time && r.departure_time.slice(0, 10) === this.scheduleDate())) {
-      this.alertService.error('Error', 'Please select a route and departure time for every trip. Make sure each departure uses the selected schedule date.');
+    if (!this.tripRows().every((r) => !!r.route_id && !!r.departure_time && !Number.isNaN(new Date(r.departure_time).getTime()))) {
+      this.alertService.error('Error', 'Please select a valid route, date, and departure time for every trip.');
       return;
     }
 
@@ -316,7 +315,6 @@ export class Schedules implements OnInit {
       bus_id: bus.id,
       driver_id: driverId,
       conductor_id: conductorId,
-      date: this.scheduleDate(),
       trips: this.tripRows().map((r) => ({
         route_id: r.route_id,
         departure_time: r.departure_time,
