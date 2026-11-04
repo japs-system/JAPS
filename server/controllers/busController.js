@@ -555,48 +555,31 @@ const createTripsBulk = async (req, res) => {
       });
     }
 
-    // Assign trip numbers separately for each departure date.
-    // Each date starts after the last trip number already saved for that day.
-    const nextTripNumberByDate = new Map();
+    // Assign trip numbers sequentially for the selected bus across all dates.
+    // This avoids duplicate trip_number values when one submission contains
+    // trips on multiple dates and the database enforces a uniqueness rule.
+    const highestTrip = await Trip.findOne({
+      where: { bus_id },
+      attributes: ["trip_number"],
+      order: [["trip_number", "DESC"]],
+    });
+    let nextTripNumber = highestTrip
+      ? Number(highestTrip.trip_number) + 1
+      : 1;
+
     const created = [];
 
     for (const tripData of parsedTrips) {
-      const departureDate = tripData.departure_time;
-      const dateKey = tripData.date_key;
-
-      if (!nextTripNumberByDate.has(dateKey)) {
-        const dayStart = new Date(departureDate);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(departureDate);
-        dayEnd.setHours(23, 59, 59, 999);
-
-        const existing = await Trip.findAll({
-          where: {
-            bus_id,
-            departure_time: { [Op.between]: [dayStart, dayEnd] },
-          },
-          order: [["trip_number", "DESC"]],
-          limit: 1,
-        });
-
-        nextTripNumberByDate.set(
-          dateKey,
-          existing.length > 0 ? Number(existing[0].trip_number) + 1 : 1,
-        );
-      }
-
-      const tripNumber = nextTripNumberByDate.get(dateKey);
       const trip = await Trip.create({
         bus_id,
         route_id: tripData.route_id,
         driver_id,
         conductor_id,
-        trip_number: tripNumber,
-        departure_time: departureDate,
+        trip_number: nextTripNumber++,
+        departure_time: tripData.departure_time,
         status: "scheduled",
       });
 
-      nextTripNumberByDate.set(dateKey, tripNumber + 1);
       created.push(trip);
     }
 
@@ -681,8 +664,14 @@ const createTripsBulk = async (req, res) => {
   } catch (error) {
     console.error("createTripsBulk error:", error);
 
+    const validationDetails = Array.isArray(error.errors)
+      ? error.errors.map((item) => item.message).join("; ")
+      : null;
+
     return res.status(500).json({
       message:
+        validationDetails ||
+        error.parent?.detail ||
         error.message ||
         "Could not create the schedule. Please check the bus, crew, route, and departure time.",
     });
