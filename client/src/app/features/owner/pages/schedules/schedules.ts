@@ -1,3 +1,4 @@
+
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -258,21 +259,63 @@ export class Schedules implements OnInit {
     );
   }
 
+  // The API may return crew IDs directly or inside the assigned crew objects.
+  private getSelectedDriverId(): number | null {
+    const bus = this.selectedBus();
+    return bus?.driver_id ?? bus?.assignedDriver?.id ?? null;
+  }
+
+  private getSelectedConductorId(): number | null {
+    const bus = this.selectedBus();
+    return bus?.conductor_id ?? bus?.assignedConductor?.id ?? null;
+  }
+
   canSave(): boolean {
     const bus = this.selectedBus();
-    if (!bus?.driver_id || !bus?.conductor_id) return false;
-    if (this.tripRows().length === 0) return false;
-    return this.tripRows().every((r) => !!r.route_id && !!r.departure_time);
+    if (!bus) return false;
+    if (!this.getSelectedDriverId() || !this.getSelectedConductorId()) return false;
+    if (!this.scheduleDate() || this.tripRows().length === 0) return false;
+    return this.tripRows().every((r) => {
+      if (!r.route_id || !r.departure_time) return false;
+      const departureDate = r.departure_time.slice(0, 10);
+      return departureDate === this.scheduleDate();
+    });
   }
 
   save(): void {
-    if (!this.canSave()) return;
-    const bus = this.selectedBus()!;
+    const bus = this.selectedBus();
+    const driverId = this.getSelectedDriverId();
+    const conductorId = this.getSelectedConductorId();
+
+    if (!bus) {
+      this.alertService.error('Error', 'Please select a bus.');
+      return;
+    }
+    if (!driverId || !conductorId) {
+      this.alertService.error('Error', 'Please assign both a driver and a conductor to this bus first.');
+      return;
+    }
+    if (!this.scheduleDate() || this.tripRows().length === 0) {
+      this.alertService.error('Error', 'Please select a date and add at least one trip.');
+      return;
+    }
+    if (!this.tripRows().every((r) => !!r.route_id && !!r.departure_time && r.departure_time.slice(0, 10) === this.scheduleDate())) {
+      this.alertService.error('Error', 'Please select a route and departure time for every trip. Make sure each departure uses the selected schedule date.');
+      return;
+    }
+
+    // Prevent duplicate departure slots for the same bus within this batch.
+    const departureSlots = this.tripRows().map((r) => r.departure_time.slice(0, 16));
+    if (new Set(departureSlots).size !== departureSlots.length) {
+      this.alertService.error('Duplicate schedule', 'This bus cannot have multiple trips at the same date and time. Please choose a different departure time.');
+      return;
+    }
+
     this.saving.set(true);
     const payload = {
       bus_id: bus.id,
-      driver_id: bus.driver_id,
-      conductor_id: bus.conductor_id,
+      driver_id: driverId,
+      conductor_id: conductorId,
       date: this.scheduleDate(),
       trips: this.tripRows().map((r) => ({
         route_id: r.route_id,
