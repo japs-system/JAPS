@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { BusModel, User, Trip, Route, BusCrewHistory } = require("../models");
+const { BusInfo, User, Trip, Route, CrewAssignment } = require("../models");
 const {
   fullName,
   sendTripScheduledEmail,
@@ -44,7 +44,7 @@ const busInclude = [
 
 // GET /api/buses
 const getBuses = async (req, res) => {
-  const buses = await BusModel.findAll({
+  const buses = await BusInfo.findAll({
     order: [["bus_number", "ASC"]],
     include: [
       {
@@ -70,7 +70,7 @@ const getBuses = async (req, res) => {
 // POST /api/buses
 const createBus = async (req, res) => {
   const { bus_number, plate_number, capacity, status } = req.body;
-  const bus = await BusModel.create({
+  const bus = await BusInfo.create({
     bus_number,
     plate_number,
     capacity,
@@ -81,7 +81,7 @@ const createBus = async (req, res) => {
 
 // PUT /api/buses/:id
 const updateBus = async (req, res) => {
-  const bus = await BusModel.findByPk(req.params.id);
+  const bus = await BusInfo.findByPk(req.params.id);
   if (!bus) return res.status(404).json({ message: "Bus not found." });
   const { bus_number, plate_number, capacity, status, route_id } = req.body;
   await bus.update({
@@ -96,7 +96,7 @@ const updateBus = async (req, res) => {
 
 // DELETE /api/buses/:id
 const deleteBus = async (req, res) => {
-  const bus = await BusModel.findByPk(req.params.id);
+  const bus = await BusInfo.findByPk(req.params.id);
   if (!bus) return res.status(404).json({ message: "Bus not found." });
   await bus.destroy();
   return res.status(204).send();
@@ -104,7 +104,7 @@ const deleteBus = async (req, res) => {
 
 // PUT /api/buses/:id/assign-crew
 const assignCrew = async (req, res) => {
-  const bus = await BusModel.findByPk(req.params.id);
+  const bus = await BusInfo.findByPk(req.params.id);
   if (!bus) return res.status(404).json({ message: "Bus not found." });
 
   const { driver_id, conductor_id } = req.body;
@@ -214,7 +214,7 @@ const getTrips = async (req, res) => {
   const trips = await Trip.findAll({
     where: { departure_time: { [Op.between]: [start, end] } },
     include: [
-      { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
+      { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
       { model: Route, attributes: ["id", "origin", "destination"] },
       {
         model: User,
@@ -235,7 +235,7 @@ const getTrips = async (req, res) => {
 // Look up bus/route labels and notify the assigned driver/conductor of a scheduled trip.
 const notifyTripScheduled = async ({ bus_id, route_id, driver_id, conductor_id, trip_number, departure_time }) => {
   const [bus, route, driver, conductor] = await Promise.all([
-    BusModel.findByPk(bus_id),
+    BusInfo.findByPk(bus_id),
     Route.findByPk(route_id),
     User.findByPk(driver_id),
     User.findByPk(conductor_id),
@@ -374,7 +374,7 @@ const createTripsBulk = async (req, res) => {
   notify(
     (async () => {
       const [bus, driver, conductor, routes] = await Promise.all([
-        BusModel.findByPk(bus_id),
+        BusInfo.findByPk(bus_id),
         User.findByPk(driver_id),
         User.findByPk(conductor_id),
         Route.findAll({ where: { id: created.map((t) => t.route_id) } }),
