@@ -114,7 +114,7 @@ export class FareSettings implements OnInit {
     const ratePerKm = parseFloat(v.rate_per_km) || 0;
     // If distance <= base_distance_km, use min_fare. Otherwise add per-km rate.
     const baseFare =
-      distance <= baseDistanceKm ? minFare : minFare + (distance - baseDistanceKm) * ratePerKm;
+      distance <= baseDistanceKm ? minFare : distance * ratePerKm;
 
     const fare = (pct: unknown) =>
       Math.round(baseFare * (1 - (parseFloat(String(pct)) || 0) / 100));
