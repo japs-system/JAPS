@@ -1,4 +1,3 @@
-
 const { Op } = require("sequelize");
 const { BusModel, User, Trip, Route, BusCrewHistory } = require("../models");
 const {
@@ -11,8 +10,7 @@ const {
 const { OWNER_LEVEL_ROLES } = require("../middleware/auth");
 const { createNotification } = require("../services/notificationService");
 
-const notify = (promise) =>
-  promise.catch((err) => console.error("Email notification failed:", err));
+const notify = (promise) => promise.catch((err) => console.error("Email notification failed:", err));
 
 // Friendly date/time text for in-app notifications (Philippine time).
 const formatDate = (value) =>
@@ -22,13 +20,27 @@ const formatDate = (value) =>
     year: "numeric",
     timeZone: "Asia/Manila",
   });
-
 const formatTime = (value) =>
   new Date(value).toLocaleTimeString("en-PH", {
     hour: "numeric",
     minute: "2-digit",
     timeZone: "Asia/Manila",
   });
+
+const busInclude = [
+  {
+    model: User,
+    as: "driver",
+    attributes: ["id", "first_name", "last_name", "employee_id"],
+    foreignKey: "driver_id",
+  },
+  {
+    model: User,
+    as: "conductor",
+    attributes: ["id", "first_name", "last_name", "employee_id"],
+    foreignKey: "conductor_id",
+  },
+];
 
 // GET /api/buses
 const getBuses = async (req, res) => {
@@ -52,47 +64,26 @@ const getBuses = async (req, res) => {
       },
     ],
   });
-
-  // Return both crew association objects and their IDs for the frontend.
-  return res.json(
-    buses.map((bus) => {
-      const data = bus.toJSON();
-
-      return {
-        ...data,
-        driver_id: data.driver_id ?? data.assignedDriver?.id ?? null,
-        conductor_id:
-          data.conductor_id ?? data.assignedConductor?.id ?? null,
-        route_id: data.route_id ?? data.defaultRoute?.id ?? null,
-      };
-    }),
-  );
+  return res.json(buses);
 };
 
 // POST /api/buses
 const createBus = async (req, res) => {
   const { bus_number, plate_number, capacity, status } = req.body;
-
   const bus = await BusModel.create({
     bus_number,
     plate_number,
     capacity,
     status,
   });
-
   return res.status(201).json(bus);
 };
 
 // PUT /api/buses/:id
 const updateBus = async (req, res) => {
   const bus = await BusModel.findByPk(req.params.id);
-
-  if (!bus) {
-    return res.status(404).json({ message: "Bus not found." });
-  }
-
+  if (!bus) return res.status(404).json({ message: "Bus not found." });
   const { bus_number, plate_number, capacity, status, route_id } = req.body;
-
   await bus.update({
     bus_number,
     plate_number,
@@ -100,18 +91,13 @@ const updateBus = async (req, res) => {
     status,
     route_id: route_id ?? null,
   });
-
   return res.json(bus);
 };
 
 // DELETE /api/buses/:id
 const deleteBus = async (req, res) => {
   const bus = await BusModel.findByPk(req.params.id);
-
-  if (!bus) {
-    return res.status(404).json({ message: "Bus not found." });
-  }
-
+  if (!bus) return res.status(404).json({ message: "Bus not found." });
   await bus.destroy();
   return res.status(204).send();
 };
@@ -119,22 +105,20 @@ const deleteBus = async (req, res) => {
 // PUT /api/buses/:id/assign-crew
 const assignCrew = async (req, res) => {
   const bus = await BusModel.findByPk(req.params.id);
-
-  if (!bus) {
-    return res.status(404).json({ message: "Bus not found." });
-  }
+  if (!bus) return res.status(404).json({ message: "Bus not found." });
 
   const { driver_id, conductor_id } = req.body;
   const now = new Date();
-
   const previousDriverId = bus.driver_id;
   const previousConductorId = bus.conductor_id;
 
+  // Close any open history record for this bus
   await BusCrewHistory.update(
     { unassigned_at: now },
     { where: { bus_id: bus.id, unassigned_at: null } },
   );
 
+  // Only create a new history row if there's actually someone being assigned
   if (driver_id || conductor_id) {
     await BusCrewHistory.create({
       bus_id: bus.id,
@@ -150,29 +134,24 @@ const assignCrew = async (req, res) => {
   });
 
   const busLabel = bus.bus_number;
-
-  const crewLink = (role) =>
-    role === "driver" ? "/driver/dashboard" : "/conductor/trips";
-
+  // Drivers and conductors each get a bell notification, linking to their own portal.
+  const crewLink = (role) => (role === "driver" ? "/driver/dashboard" : "/conductor/trips");
   const notifyCrewChange = async (previousId, newId, role) => {
     if (previousId === newId) return;
-
     if (previousId) {
-      const previousUser = await User.findByPk(previousId);
-
-      if (previousUser) {
+      const prevUser = await User.findByPk(previousId);
+      if (prevUser) {
         notify(
           sendCrewAssignmentEmail({
-            to: previousUser.email,
-            name: fullName(previousUser),
+            to: prevUser.email,
+            name: fullName(prevUser),
             role,
             busLabel,
             assigned: false,
           }),
         );
-
         await createNotification({
-          userId: previousUser.id,
+          userId: prevUser.id,
           type: "crew_unassigned",
           title: "Bus assignment removed",
           message: `You are no longer assigned to Bus ${busLabel}.`,
@@ -180,10 +159,8 @@ const assignCrew = async (req, res) => {
         });
       }
     }
-
     if (newId) {
       const newUser = await User.findByPk(newId);
-
       if (newUser) {
         notify(
           sendCrewAssignmentEmail({
@@ -194,7 +171,6 @@ const assignCrew = async (req, res) => {
             assigned: true,
           }),
         );
-
         await createNotification({
           userId: newUser.id,
           type: "crew_assigned",
@@ -212,15 +188,13 @@ const assignCrew = async (req, res) => {
   return res.json(bus);
 };
 
-// GET /api/buses/trips
+// GET /api/buses/trips?date=YYYY-MM-DD  OR  ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
 const getTrips = async (req, res) => {
-  let start;
-  let end;
+  let start, end;
 
   if (req.query.startDate && req.query.endDate) {
     start = new Date(req.query.startDate);
     start.setHours(0, 0, 0, 0);
-
     end = new Date(req.query.endDate);
     end.setHours(23, 59, 59, 999);
   } else {
@@ -231,29 +205,17 @@ const getTrips = async (req, res) => {
           d.setDate(d.getDate() + 1);
           return d;
         })();
-
     start = new Date(date);
     start.setHours(0, 0, 0, 0);
-
     end = new Date(date);
     end.setHours(23, 59, 59, 999);
   }
 
   const trips = await Trip.findAll({
-    where: {
-      departure_time: {
-        [Op.between]: [start, end],
-      },
-    },
+    where: { departure_time: { [Op.between]: [start, end] } },
     include: [
-      {
-        model: BusModel,
-        attributes: ["id", "bus_number", "plate_number"],
-      },
-      {
-        model: Route,
-        attributes: ["id", "origin", "destination"],
-      },
+      { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
+      { model: Route, attributes: ["id", "origin", "destination"] },
       {
         model: User,
         as: "driver",
@@ -267,37 +229,26 @@ const getTrips = async (req, res) => {
     ],
     order: [["departure_time", "ASC"]],
   });
-
   return res.json(trips);
 };
 
-// Send notifications for a newly scheduled trip.
-const notifyTripScheduled = async ({
-  bus_id,
-  route_id,
-  driver_id,
-  conductor_id,
-  trip_number,
-  departure_time,
-}) => {
+// Look up bus/route labels and notify the assigned driver/conductor of a scheduled trip.
+const notifyTripScheduled = async ({ bus_id, route_id, driver_id, conductor_id, trip_number, departure_time }) => {
   const [bus, route, driver, conductor] = await Promise.all([
     BusModel.findByPk(bus_id),
     Route.findByPk(route_id),
     User.findByPk(driver_id),
     User.findByPk(conductor_id),
   ]);
-
   const busLabel = bus?.bus_number ?? String(bus_id);
-  const routeLabel = route
-    ? `${route.origin} → ${route.destination}`
-    : "";
+  const routeLabel = route ? `${route.origin} → ${route.destination}` : "";
 
+  // In-app notification for the conductor and the driver.
   for (const [person, link] of [
     [conductor, "/conductor/trips"],
     [driver, "/driver/dashboard"],
   ]) {
     if (!person) continue;
-
     await createNotification({
       userId: person.id,
       type: "schedule_assigned",
@@ -307,13 +258,12 @@ const notifyTripScheduled = async ({
     });
   }
 
-  for (const person of [driver, conductor]) {
-    if (!person) continue;
-
+  for (const user of [driver, conductor]) {
+    if (!user) continue;
     notify(
       sendTripScheduledEmail({
-        to: person.email,
-        name: fullName(person),
+        to: user.email,
+        name: fullName(user),
         tripNumber: trip_number,
         busLabel,
         routeLabel,
@@ -327,31 +277,15 @@ const notifyTripScheduled = async ({
     date: departure_time,
     driver,
     conductor,
-    trips: [
-      {
-        tripNumber: trip_number,
-        routeLabel,
-        departureTime: departure_time,
-      },
-    ],
+    trips: [{ tripNumber: trip_number, routeLabel, departureTime: departure_time }],
   });
 };
 
-// Notify owner-level staff about newly scheduled trips.
-const notifyManagementOfSchedule = async ({
-  busLabel,
-  date,
-  driver,
-  conductor,
-  trips,
-}) => {
+// Copy owner-level staff (owner/secretary/admin staff) on every newly scheduled crew trip.
+const notifyManagementOfSchedule = async ({ busLabel, date, driver, conductor, trips }) => {
   const managers = await User.findAll({
-    where: {
-      role: OWNER_LEVEL_ROLES,
-      is_active: true,
-    },
+    where: { role: OWNER_LEVEL_ROLES, is_active: true },
   });
-
   for (const manager of managers) {
     notify(
       sendTripsScheduledManagementEmail({
@@ -367,364 +301,135 @@ const notifyManagementOfSchedule = async ({
   }
 };
 
-// Check whether this bus already has a trip in any of the requested departure minutes.
-// A time slot is treated as the same YYYY-MM-DD HH:mm minute.
-const findBusDepartureConflicts = async (bus_id, departureDates) => {
-  if (!departureDates.length) return [];
-
-  const minuteWindows = departureDates.map((departure) => ({
-    departure_time: {
-      [Op.gte]: departure,
-      [Op.lt]: new Date(departure.getTime() + 60 * 1000),
-    },
-  }));
-
-  return Trip.findAll({
-    where: {
-      bus_id,
-      [Op.or]: minuteWindows,
-    },
-    attributes: ["id", "departure_time", "trip_number"],
-  });
-};
-
-const formatDepartureSlot = (value) =>
-  new Date(value).toLocaleString("en-PH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Manila",
-  });
-
-// Keep PostgreSQL's auto-generated Trip ID sequence in sync with the table.
-// This fixes duplicate primary-key errors when older imports/manual inserts
-// have moved the table IDs ahead of the sequence counter.
-const syncTripIdSequence = async () => {
-  const table = Trip.getTableName();
-  const queryInterface = Trip.sequelize.getQueryInterface();
-  const quotedTable = queryInterface.quoteTable(table);
-  const primaryKey = Trip.primaryKeyField || Trip.primaryKeyAttribute || "id";
-  const primaryKeyField = Trip.rawAttributes?.[primaryKey]?.field || primaryKey;
-  const quotedPrimaryKey = queryInterface.quoteIdentifier(primaryKeyField);
-  const tableReference = (typeof table === "string"
-    ? table
-    : `${table.schema ? `${table.schema}.` : ""}${table.tableName}`
-  ).replace(/'/g, "''");
-  const columnReference = String(primaryKeyField).replace(/'/g, "''");
-
-  await Trip.sequelize.query(`
-    SELECT setval(
-      pg_get_serial_sequence('${tableReference}', '${columnReference}'),
-      COALESCE((SELECT MAX(${quotedPrimaryKey}) FROM ${quotedTable}), 0) + 1,
-      false
-    )
-  `);
-};
-
 // POST /api/buses/trips
 const createTrip = async (req, res) => {
-  const { bus_id, route_id, trip_number, departure_time } = req.body;
-
-  if (!bus_id || !route_id || !departure_time || Number.isNaN(new Date(departure_time).getTime())) {
-    return res.status(400).json({
-      message: "Please provide a valid bus, route, and departure date/time.",
-    });
-  }
-
-  const bus = await BusModel.findByPk(bus_id);
-  if (!bus) {
-    return res.status(404).json({ message: "Selected bus was not found." });
-  }
-
-  // Crew is always taken from the bus assignment, not from the request payload.
-  const driver_id = bus.driver_id;
-  const conductor_id = bus.conductor_id;
-
-  if (!driver_id || !conductor_id) {
-    return res.status(400).json({
-      message: "Please assign both a driver and a conductor to the selected bus before scheduling.",
-    });
-  }
-
-  const departureDate = new Date(departure_time);
-  const conflicts = await findBusDepartureConflicts(bus_id, [departureDate]);
-  if (conflicts.length) {
-    return res.status(409).json({
-      message: `Bus ${bus.bus_number} already has a trip scheduled for ${formatDepartureSlot(departureDate)}. Please choose another departure time.`,
-    });
-  }
-
-  await syncTripIdSequence();
-
+  const {
+    bus_id,
+    route_id,
+    driver_id,
+    conductor_id,
+    trip_number,
+    departure_time,
+  } = req.body;
   const trip = await Trip.create({
     bus_id,
     route_id,
     driver_id,
     conductor_id,
     trip_number,
-    departure_time: departureDate,
+    departure_time,
     status: "scheduled",
   });
 
-  notify(
-    notifyTripScheduled({
-      bus_id,
-      route_id,
-      driver_id,
-      conductor_id,
-      trip_number,
-      departure_time: departureDate,
-    }),
-  );
+  notify(notifyTripScheduled({ bus_id, route_id, driver_id, conductor_id, trip_number, departure_time }));
 
   return res.status(201).json(trip);
 };
 
-// POST /api/buses/trips/bulk
+// POST /api/buses/trips/bulk — create multiple trips, trip numbers auto-assigned
 const createTripsBulk = async (req, res) => {
-  try {
-    const { bus_id, trips } = req.body;
-
-    if (!bus_id || !Array.isArray(trips) || trips.length === 0) {
-      return res.status(400).json({
-        message: "Please provide a bus and at least one trip.",
-      });
-    }
-
-    // Always use the crew already assigned to the selected bus.
-    const bus = await BusModel.findByPk(bus_id);
-
-    if (!bus) {
-      return res.status(404).json({
-        message: "Selected bus was not found.",
-      });
-    }
-
-    const driver_id = bus.driver_id;
-    const conductor_id = bus.conductor_id;
-
-    if (!driver_id || !conductor_id) {
-      return res.status(400).json({
-        message:
-          "Please assign both a driver and a conductor to the selected bus before scheduling.",
-      });
-    }
-
-    // Validate all rows before creating any trip.
-    const parsedTrips = [];
-    const requestedSlots = new Set();
-
-    for (let i = 0; i < trips.length; i++) {
-      const trip = trips[i];
-
-      if (!trip?.route_id || !trip?.departure_time) {
-        return res.status(400).json({
-          message: `Trip ${i + 1} is missing a route or departure time.`,
-        });
-      }
-
-      const departureDate = new Date(trip.departure_time);
-      if (Number.isNaN(departureDate.getTime())) {
-        return res.status(400).json({
-          message: `Trip ${i + 1} has an invalid departure date or time.`,
-        });
-      }
-
-      // Duplicate times within the same bulk submission are not allowed for this bus.
-      const slotKey = Math.floor(departureDate.getTime() / 60000);
-      if (requestedSlots.has(slotKey)) {
-        return res.status(409).json({
-          message: `This bus has more than one trip set for ${formatDepartureSlot(departureDate)}. Each trip must have a different departure time.`,
-        });
-      }
-      requestedSlots.add(slotKey);
-      parsedTrips.push({
-        route_id: Number(trip.route_id),
-        departure_time: departureDate,
-        date_key: String(trip.departure_time).slice(0, 10),
-      });
-    }
-
-    // Check saved schedules for this same bus. Driver/conductor conflicts across
-    // different buses are intentionally allowed.
-    const conflicts = await findBusDepartureConflicts(
-      bus_id,
-      parsedTrips.map((trip) => trip.departure_time),
-    );
-
-    if (conflicts.length) {
-      const conflictTime = conflicts[0].departure_time;
-      return res.status(409).json({
-        message: `Bus ${bus.bus_number} already has a trip scheduled for ${formatDepartureSlot(conflictTime)}. Please choose another departure time.`,
-      });
-    }
-
-    const routeIds = [
-      ...new Set(parsedTrips.map((trip) => trip.route_id)),
-    ];
-
-    const validRoutes = await Route.findAll({
-      where: {
-        id: routeIds,
-      },
-    });
-
-    const validRouteIds = new Set(
-      validRoutes.map((route) => Number(route.id)),
-    );
-
-    const missingRoute = routeIds.find(
-      (id) => !validRouteIds.has(id),
-    );
-
-    if (missingRoute) {
-      return res.status(400).json({
-        message: `Route ${missingRoute} was not found. Please refresh the route list.`,
-      });
-    }
-
-    // Assign trip numbers sequentially for the selected bus across all dates.
-    // This avoids duplicate trip_number values when one submission contains
-    // trips on multiple dates and the database enforces a uniqueness rule.
-    const highestTrip = await Trip.findOne({
-      where: { bus_id },
-      attributes: ["trip_number"],
-      order: [["trip_number", "DESC"]],
-    });
-    let nextTripNumber = highestTrip
-      ? Number(highestTrip.trip_number) + 1
-      : 1;
-
-    const created = [];
-
-    // Repair the Trip primary-key sequence before inserting new records.
-    await syncTripIdSequence();
-
-    for (const tripData of parsedTrips) {
-      const trip = await Trip.create({
-        bus_id,
-        route_id: tripData.route_id,
-        driver_id,
-        conductor_id,
-        trip_number: nextTripNumber++,
-        departure_time: tripData.departure_time,
-        status: "scheduled",
-      });
-
-      created.push(trip);
-    }
-
-    const uniqueDepartureDates = [
-      ...new Set(
-        created.map((trip) => formatDate(trip.departure_time)),
-      ),
-    ];
-    const notificationDateLabel =
-      uniqueDepartureDates.length === 1
-        ? uniqueDepartureDates[0]
-        : `${uniqueDepartureDates.length} different dates`;
-
-    // Send notifications after the trips have been saved.
-    notify(
-      (async () => {
-        const [driver, conductor] = await Promise.all([
-          User.findByPk(driver_id),
-          User.findByPk(conductor_id),
-        ]);
-
-        const busLabel = bus.bus_number ?? String(bus_id);
-
-        const routeById = new Map(
-          validRoutes.map((route) => [
-            Number(route.id),
-            `${route.origin} → ${route.destination}`,
-          ]),
-        );
-
-        const tripSummaries = created.map((trip) => ({
-          tripNumber: trip.trip_number,
-          routeLabel: routeById.get(Number(trip.route_id)) ?? "",
-          departureTime: trip.departure_time,
-        }));
-
-        const count = created.length;
-
-        for (const [person, link] of [
-          [conductor, "/conductor/trips"],
-          [driver, "/driver/dashboard"],
-        ]) {
-          if (!person) continue;
-
-          await createNotification({
-            userId: person.id,
-            type: "schedule_assigned",
-            title:
-              count === 1
-                ? "New schedule assigned"
-                : `${count} new trips scheduled`,
-            message: `Bus ${busLabel}: ${count} trip${count === 1 ? "" : "s"} scheduled across ${notificationDateLabel}. First departure: ${formatDate(created[0].departure_time)} at ${formatTime(created[0].departure_time)}.`,
-            link,
-          });
-        }
-
-        for (const person of [driver, conductor]) {
-          if (!person) continue;
-
-          notify(
-            sendTripsScheduledSummaryEmail({
-              to: person.email,
-              name: fullName(person),
-              busLabel,
-              date: created[0].departure_time,
-              trips: tripSummaries,
-            }),
-          );
-        }
-
-        await notifyManagementOfSchedule({
-          busLabel,
-          date: created[0].departure_time,
-          driver,
-          conductor,
-          trips: tripSummaries,
-        });
-      })(),
-    );
-
-    return res.status(201).json(created);
-  } catch (error) {
-    console.error("createTripsBulk error:", error);
-
-    const validationDetails = Array.isArray(error.errors)
-      ? error.errors.map((item) => item.message).join("; ")
-      : null;
-
-    return res.status(500).json({
+  const { bus_id, driver_id, conductor_id, date, trips } = req.body;
+  // trips = [{ route_id, departure_time }]
+  if (
+    !bus_id ||
+    !driver_id ||
+    !conductor_id ||
+    !date ||
+    !Array.isArray(trips) ||
+    trips.length === 0
+  ) {
+    return res.status(400).json({
       message:
-        validationDetails ||
-        error.parent?.detail ||
-        error.message ||
-        "Could not create the schedule. Please check the bus, crew, route, and departure time.",
+        "bus_id, driver_id, conductor_id, date, and trips[] are required.",
     });
   }
+
+  // Find the highest existing trip_number for this bus on this date
+  const dayStart = new Date(date + "T00:00:00");
+  const dayEnd = new Date(date + "T23:59:59");
+  const existing = await Trip.findAll({
+    where: {
+      bus_id,
+      departure_time: { [Op.between]: [dayStart, dayEnd] },
+    },
+    order: [["trip_number", "DESC"]],
+    limit: 1,
+  });
+  let nextTripNumber = existing.length > 0 ? existing[0].trip_number + 1 : 1;
+
+  const created = [];
+  for (const t of trips) {
+    const trip = await Trip.create({
+      bus_id,
+      route_id: t.route_id,
+      driver_id,
+      conductor_id,
+      trip_number: nextTripNumber++,
+      departure_time: t.departure_time,
+      status: "scheduled",
+    });
+    created.push(trip);
+  }
+
+  notify(
+    (async () => {
+      const [bus, driver, conductor, routes] = await Promise.all([
+        BusModel.findByPk(bus_id),
+        User.findByPk(driver_id),
+        User.findByPk(conductor_id),
+        Route.findAll({ where: { id: created.map((t) => t.route_id) } }),
+      ]);
+      const busLabel = bus?.bus_number ?? String(bus_id);
+      const routeById = new Map(routes.map((r) => [r.id, `${r.origin} → ${r.destination}`]));
+      const tripSummaries = created.map((t) => ({
+        tripNumber: t.trip_number,
+        routeLabel: routeById.get(t.route_id) ?? "",
+        departureTime: t.departure_time,
+      }));
+
+      // One in-app notification for the whole batch (not one per trip).
+      const count = created.length;
+      for (const [person, link] of [
+        [conductor, "/conductor/trips"],
+        [driver, "/driver/dashboard"],
+      ]) {
+        if (!person) continue;
+        await createNotification({
+          userId: person.id,
+          type: "schedule_assigned",
+          title: count === 1 ? "New schedule assigned" : `${count} new trips scheduled`,
+          message: `Bus ${busLabel} on ${formatDate(date)}: ${count} trip${count === 1 ? "" : "s"}, first departure at ${formatTime(created[0].departure_time)}.`,
+          link,
+        });
+      }
+
+      for (const user of [driver, conductor]) {
+        if (!user) continue;
+        notify(
+          sendTripsScheduledSummaryEmail({
+            to: user.email,
+            name: fullName(user),
+            busLabel,
+            date,
+            trips: tripSummaries,
+          }),
+        );
+      }
+
+      await notifyManagementOfSchedule({ busLabel, date, driver, conductor, trips: tripSummaries });
+    })(),
+  );
+
+  return res.status(201).json(created);
 };
 
 // DELETE /api/buses/trips/:id
 const deleteTrip = async (req, res) => {
   const trip = await Trip.findByPk(req.params.id);
+  if (!trip) return res.status(404).json({ message: "Trip not found." });
 
-  if (!trip) {
-    return res.status(404).json({
-      message: "Trip not found.",
-    });
-  }
-
-  const {
-    conductor_id,
-    driver_id,
-    trip_number,
-    departure_time,
-  } = trip;
-
+  // Keep the details before the row is gone.
+  const { conductor_id, driver_id, trip_number, departure_time } = trip;
   await trip.destroy();
 
   for (const [userId, link] of [
@@ -732,7 +437,6 @@ const deleteTrip = async (req, res) => {
     [driver_id, "/driver/dashboard"],
   ]) {
     if (!userId) continue;
-
     await createNotification({
       userId,
       type: "schedule_cancelled",
@@ -747,19 +451,14 @@ const deleteTrip = async (req, res) => {
 
 // GET /api/buses/routes
 const getRoutes = async (req, res) => {
-  const routes = await Route.findAll({
-    order: [["origin", "ASC"]],
-  });
-
+  const routes = await Route.findAll({ order: [["origin", "ASC"]] });
   return res.json(routes);
 };
 
 // GET /api/buses/:id/crew-history
 const getCrewHistory = async (req, res) => {
   const history = await BusCrewHistory.findAll({
-    where: {
-      bus_id: req.params.id,
-    },
+    where: { bus_id: req.params.id },
     include: [
       {
         model: User,
@@ -774,7 +473,6 @@ const getCrewHistory = async (req, res) => {
     ],
     order: [["assigned_at", "DESC"]],
   });
-
   return res.json(history);
 };
 
