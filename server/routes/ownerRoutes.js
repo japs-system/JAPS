@@ -962,11 +962,13 @@ function buildMonthlyDailySheet(wb, approved, from, to) {
 
   const cell = {}; // `${day}|${busId}` -> total revenue
   const exp = {};
+  const nc = {};
   approved.forEach((r) => {
     const d = dateKey(r.date);
     const k = `${d}|${r.BusModel ? r.BusModel.id : ""}`;
     cell[k] = (cell[k] || 0) + num(r.net_collection) + num(r.cash_deposit);
     exp[d] = (exp[d] || 0) + num(r.total_expenses);
+    nc[d] = (nc[d] || 0) + num(r.net_collection);
   });
 
   const first = 4, last = first + days.length - 1;
@@ -984,8 +986,10 @@ function buildMonthlyDailySheet(wb, approved, from, to) {
     const e = exp[d] || 0;
     row.getCell(cTotal).value = { formula: `SUM(B${rn}:${L(nb + 1)}${rn})`, result: tot };
     row.getCell(cExp).value = e || null;
-    row.getCell(cNet).value = { formula: `SUM(${L(cTotal)}${rn}-${L(cExp)}${rn})`, result: tot - e };
-    row.getCell(cLeft).value = { formula: `SUM(${L(cNet)}${rn}-${L(cNse)}${rn})`, result: tot - e };
+    // NET COLLECTION = the app's real net collection of the day (matches the Summary sheet).
+    const n = nc[d] || 0;
+    row.getCell(cNet).value = n;
+    row.getCell(cLeft).value = { formula: `SUM(${L(cNet)}${rn}-${L(cNse)}${rn})`, result: n };
     for (let c = 1; c <= cLeft; c++) {
       const x = row.getCell(c);
       x.border = BOX;

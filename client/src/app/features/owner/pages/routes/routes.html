@@ -12,21 +12,12 @@
 </div>
 
 <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+
   <!-- Toolbar -->
-  <div class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
-    <div class="relative w-full sm:w-80">
-      <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-      <input
-        type="text"
-        placeholder="Search origin or destination…"
-        [value]="search()"
-        (input)="onSearch($event)"
-        class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 placeholder:text-gray-400"
-      />
-    </div>
-    <span class="text-xs text-gray-400 ml-auto"
-      >{{ totalItems() }} result{{ totalItems() !== 1 ? 's' : '' }}</span
-    >
+  <div class="flex items-center px-5 py-4 border-b border-gray-100">
+    <span class="text-xs text-gray-400 ml-auto">
+      {{ totalItems() }} result{{ totalItems() !== 1 ? 's' : '' }}
+    </span>
   </div>
 
   @if (loading()) {

@@ -44,8 +44,12 @@
   } @else if (paged().length === 0) {
     <div class="flex flex-col items-center justify-center py-16 text-gray-400">
       <i class="pi pi-file-check text-4xl mb-3"></i>
-      <p class="text-sm">No remittances found for {{ rangeLabel().toLowerCase() }}.</p>
-      @if (!rangeChosen()) {
+      @if (search().trim()) {
+        <p class="text-sm">No remittances match "{{ search() }}".</p>
+      } @else {
+        <p class="text-sm">No remittances found for {{ rangeLabel().toLowerCase() }}.</p>
+      }
+      @if (!rangeChosen() && !search().trim()) {
         <p class="text-xs mt-1">Pick a range on the Dashboard to see other dates.</p>
       }
     </div>
@@ -133,7 +137,7 @@
                 {{ remit.date | date: 'MMM dd, yyyy' }}
               </td>
               <td class="px-3 py-3">
-                <div class="font-medium text-gray-800">
+                <div class="font-semibold text-gray-800">
                   {{ remit.conductor.first_name }} {{ remit.conductor.last_name }}
                 </div>
               </td>
