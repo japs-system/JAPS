@@ -4,6 +4,9 @@ module.exports = (sequelize) => {
   const Remittance = sequelize.define(
     "Remittance",
     {
+      // Not auto-incremented: every ID is assigned explicitly as <year><running number>
+      // (e.g. 202617845) by services/remittance/nextRemittanceId.js when the remittance
+      // is submitted. See server/sql/2026-remittance-id-counter.sql.
       id: {
         type: DataTypes.INTEGER,
         primaryKey: true,

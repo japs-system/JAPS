@@ -28,6 +28,17 @@ const parseCashReceived = (value) => {
   return Math.round(n * 100) / 100; // 2 decimal places
 };
 
+// A money amount from the request body: a finite number >= 0 with at most 2 decimals.
+// Empty values count as 0. Returns undefined when the value is invalid.
+const MAX_AMOUNT = 9999999.99;
+const parseAmount = (value) => {
+  if (value === null || value === undefined || value === "") return 0;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > MAX_AMOUNT) return undefined;
+  if (Math.round(n * 100) / 100 !== n) return undefined;
+  return n;
+};
+
 // Tells the owner(s) how a remittance was reviewed, and flags a cash shortage/overage.
 // (The conductor is notified separately in approve/reject.)
 const notifyOwnersOfReview = (remittance, status, tellerId, cashReceived) =>
@@ -199,10 +210,12 @@ const updateRemittance = async (req, res) => {
     const remittance = await Remittance.findByPk(id);
     if (!remittance)
       return res.status(404).json({ message: "Remittance not found." });
-    if (remittance.status === "approved") {
-      return res
-        .status(400)
-        .json({ message: "Cannot edit an already-approved remittance." });
+    // Only a remittance that is awaiting review can be adjusted. Approved ones are final;
+    // rejected ones go back to the conductor to correct and resubmit.
+    if (remittance.status !== "submitted") {
+      return res.status(409).json({
+        message: `Only submitted remittances can be edited (this one is ${remittance.status}).`,
+      });
     }
 
     const {
@@ -217,6 +230,26 @@ const updateRemittance = async (req, res) => {
       conductor_officer_share,
       teller_remarks,
     } = req.body;
+
+    // Every money field must be a number from 0 up, with at most 2 decimals.
+    const amounts = {
+      gross_income,
+      total_expenses,
+      driver_commission,
+      conductor_commission,
+      bonus_allowance,
+      other_deductions,
+      cash_deposit,
+      driver_officer_share,
+      conductor_officer_share,
+    };
+    for (const [field, value] of Object.entries(amounts)) {
+      if (parseAmount(value) === undefined) {
+        return res.status(400).json({
+          message: `${field.replace(/_/g, " ")} must be a number from 0 to ${MAX_AMOUNT.toLocaleString("en-PH")} with at most 2 decimals.`,
+        });
+      }
+    }
 
     const netGross = Number(gross_income) - Number(total_expenses);
     const totalLess =
@@ -273,12 +306,28 @@ const approveRemittance = async (req, res) => {
       return res.status(404).json({ message: "Remittance not found." });
     }
 
-    await remittance.update({
-      status: "approved",
-      approved_by: auditTellerId,
-      approved_at: new Date(),
-      cash_received: cashReceived,
-    });
+    // Only a submitted remittance can be approved — never an approved or rejected one.
+    if (remittance.status !== "submitted") {
+      return res.status(409).json({
+        message: `Only submitted remittances can be approved (this one is ${remittance.status}).`,
+      });
+    }
+
+    // The status condition is repeated in the UPDATE itself, so two tellers clicking at the
+    // same moment can't both succeed (and can't send duplicate notifications).
+    const [approvedRows] = await Remittance.update(
+      {
+        status: "approved",
+        approved_by: auditTellerId,
+        approved_at: new Date(),
+        cash_received: cashReceived,
+      },
+      { where: { id, status: "submitted" } },
+    );
+    if (approvedRows === 0) {
+      return res.status(409).json({ message: "This remittance was already reviewed by someone else." });
+    }
+    await remittance.reload();
 
     // In-app notifications: the conductor's and driver's bells, then the owner(s).
     await createNotification({
@@ -343,13 +392,27 @@ const rejectRemittance = async (req, res) => {
       return res.status(404).json({ message: "Remittance not found." });
     }
 
-    await remittance.update({
-      status: "rejected",
-      approved_by: auditTellerId,
-      approved_at: new Date(),
-      teller_remarks: reason || null,
-      cash_received: cashReceived,
-    });
+    // Only a submitted remittance can be rejected — an approved one is final.
+    if (remittance.status !== "submitted") {
+      return res.status(409).json({
+        message: `Only submitted remittances can be rejected (this one is ${remittance.status}).`,
+      });
+    }
+
+    const [rejectedRows] = await Remittance.update(
+      {
+        status: "rejected",
+        approved_by: auditTellerId,
+        approved_at: new Date(),
+        teller_remarks: reason || null,
+        cash_received: cashReceived,
+      },
+      { where: { id, status: "submitted" } },
+    );
+    if (rejectedRows === 0) {
+      return res.status(409).json({ message: "This remittance was already reviewed by someone else." });
+    }
+    await remittance.reload();
 
     // In-app notifications: the conductor's and driver's bells, then the owner(s).
     await createNotification({
