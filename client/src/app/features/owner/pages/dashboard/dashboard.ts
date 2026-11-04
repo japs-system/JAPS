@@ -116,7 +116,7 @@ export class Dashboard implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.rangeState.syncPreset('month');
+    this.rangeState.syncPreset('today');
     this.fore.set(null);
     this.http
       .get<ForecastData>(`${this.API}/forecast`, { withCredentials: true })

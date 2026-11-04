@@ -72,7 +72,7 @@ export class AuditTellerDashboard implements OnInit {
   remittancesLoading = signal(false);
 
   ngOnInit(): void {
-    this.rangeState.syncPreset('7d');
+    this.rangeState.syncPreset('today');
     this.loadStats();
     this.loadRemittances();
   }
@@ -129,14 +129,13 @@ export class AuditTellerDashboard implements OnInit {
     return isNaN(d.getTime()) ? value.slice(0, 10) : this.localDateStr(d);
   }
 
-  /** The chosen range; the last 7 days until the teller picks one. */
+  /** The chosen range; today until the teller picks one. */
   range = computed(() => {
     const chosen = this.rangeState.appliedRange();
     if (chosen) return chosen;
     const now = new Date();
     const to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - 6);
-    return { from: this.localDateStr(from), to: this.localDateStr(to) };
+    return { from: this.localDateStr(to), to: this.localDateStr(to) };
   });
 
   private inRange(key: string): boolean {
