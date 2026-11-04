@@ -1,8 +1,9 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, catchError, of, finalize } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthUser, LoginResponse } from '../../shared/models/auth.models';
+import { DashboardRangeService } from './dashboard-range.service';
 
 export type { AuthUser, LoginResponse };
 
@@ -13,6 +14,8 @@ export class AuthService {
   // In-memory only — never written to localStorage/sessionStorage
   private _user = signal<AuthUser | null>(null);
 
+  private dashboardRange = inject(DashboardRangeService);
+
   constructor(private http: HttpClient) {}
 
   login(username: string, password: string): Observable<LoginResponse> {
@@ -22,6 +25,8 @@ export class AuthService {
         tap(() => {
           // Cookie is now set — user details will be loaded via fetchMe() after redirect
           this._user.set(null);
+          // New session → start without a dashboard range.
+          this.dashboardRange.reset();
         }),
       );
   }
@@ -29,7 +34,11 @@ export class AuthService {
   logout(): Observable<void> {
     return this.http
       .post<void>(`${this.API}/logout`, {}, { withCredentials: true })
-      .pipe(tap(() => this._user.set(null)));
+      .pipe(
+        tap(() => this._user.set(null)),
+        // Clear the chosen dashboard range on logout, even if the request fails.
+        finalize(() => this.dashboardRange.reset()),
+      );
   }
 
   /** Fetch the current user from the server using the httpOnly cookie. */

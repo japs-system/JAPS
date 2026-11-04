@@ -2,8 +2,12 @@ import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { environment } from '../../../../../environments/environment';
+import {
+  DashboardRangePreset,
+  DashboardRangeService,
+} from '../../../../core/services/dashboard-range.service';
 
-export type DashboardRangePreset = 'today' | '7d' | 'month' | '30d' | 'custom';
+export type { DashboardRangePreset };
 
 export type InsightTone = 'positive' | 'negative' | 'neutral' | 'warning';
 
@@ -88,6 +92,7 @@ interface ForecastData {
 })
 export class Dashboard implements OnInit {
   private http = inject(HttpClient);
+  private rangeState = inject(DashboardRangeService);
   private readonly API = `${environment.apiUrl}/api/owner`;
 
   loading = signal(true);
@@ -96,9 +101,11 @@ export class Dashboard implements OnInit {
   fore = signal<ForecastData | null>(null);
 
   // ── Date range filter ─────────────────────────────────────────────────
-  rangePreset = signal<DashboardRangePreset>('month');
-  customFrom = signal<string>('');
-  customTo = signal<string>('');
+  // Held in DashboardRangeService so it stays when switching tabs (and is shared
+  // with the Remittances page). Cleared on reload or logout.
+  rangePreset = this.rangeState.preset;
+  customFrom = this.rangeState.customFrom;
+  customTo = this.rangeState.customTo;
 
   readonly RANGE_PRESETS: { value: DashboardRangePreset; label: string }[] = [
     { value: 'today', label: 'Today' },
@@ -109,6 +116,7 @@ export class Dashboard implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.rangeState.syncPreset('month');
     this.fore.set(null);
     this.http
       .get<ForecastData>(`${this.API}/forecast`, { withCredentials: true })
@@ -116,36 +124,9 @@ export class Dashboard implements OnInit {
     this.loadDashboard();
   }
 
-  private resolvedRange(): { from: string; to: string } | null {
-    // Local calendar dates (toISOString() is UTC and shifts the day before 8 AM in PH time).
-    const toIso = (d: Date) => this.localKey(d);
-    const now = new Date();
-    switch (this.rangePreset()) {
-      case 'today':
-        return { from: toIso(now), to: toIso(now) };
-      case '7d': {
-        const from = new Date(now);
-        from.setDate(from.getDate() - 6);
-        return { from: toIso(from), to: toIso(now) };
-      }
-      case '30d': {
-        const from = new Date(now);
-        from.setDate(from.getDate() - 29);
-        return { from: toIso(from), to: toIso(now) };
-      }
-      case 'custom':
-        return this.customFrom() && this.customTo()
-          ? { from: this.customFrom(), to: this.customTo() }
-          : null;
-      case 'month':
-      default:
-        return null; // let the server default to the current month
-    }
-  }
-
   loadDashboard(): void {
     this.loading.set(true);
-    const range = this.resolvedRange();
+    const range = this.rangeState.dashboardQuery();
     let params = new HttpParams();
     if (range) {
       params = params.set('from', range.from).set('to', range.to);
@@ -162,7 +143,7 @@ export class Dashboard implements OnInit {
   }
 
   setRangePreset(preset: DashboardRangePreset): void {
-    this.rangePreset.set(preset);
+    this.rangeState.selectPreset(preset);
     if (preset !== 'custom') this.loadDashboard();
   }
 
@@ -175,7 +156,7 @@ export class Dashboard implements OnInit {
   }
 
   applyCustomRange(): void {
-    if (this.customFrom() && this.customTo()) this.loadDashboard();
+    if (this.rangeState.applyCustom()) this.loadDashboard();
   }
 
   // ── SVG helpers ─────────────────────────────────────────────────────────

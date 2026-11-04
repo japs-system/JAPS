@@ -4,6 +4,7 @@ import { RouterLink, ActivatedRoute } from '@angular/router';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { environment } from '../../../../../environments/environment';
 import { TablePagination } from '../../../../shared/components/table-pagination/table-pagination';
+import { DashboardRangeService } from '../../../../core/services/dashboard-range.service';
 
 interface Remittance {
   id: number;
@@ -36,6 +37,7 @@ type SortField = 'date' | 'submitted_at' | 'total_revenue' | 'status';
 export class Remittances implements OnInit {
   private http = inject(HttpClient);
   private route = inject(ActivatedRoute);
+  private rangeState = inject(DashboardRangeService);
   private readonly API = `${environment.apiUrl}/api/owner`;
 
   private allRemittances = signal<Remittance[]>([]);
@@ -43,8 +45,6 @@ export class Remittances implements OnInit {
 
   search = signal('');
   statusFilter = signal<string>('all');
-  dateFrom = signal<string>('');
-  dateTo = signal<string>('');
   sortField = signal<SortField>('submitted_at');
   sortDir = signal<'asc' | 'desc'>('desc');
   pageSize = signal(10);
@@ -55,8 +55,8 @@ export class Remittances implements OnInit {
   filtered = computed(() => {
     const q = this.search().toLowerCase().trim();
     const status = this.statusFilter();
-    const from = this.dateFrom();
-    const to = this.dateTo();
+    // Range comes from the Dashboard; today's remittances when none was chosen there.
+    const { from, to } = this.rangeState.remittanceRange();
 
     return this.allRemittances().filter((r) => {
       const matchSearch =
@@ -70,11 +70,11 @@ export class Remittances implements OnInit {
         r.BusModel.plate_number.toLowerCase().includes(q);
 
       const matchStatus = status === 'all' || r.status === status;
-      const remitDate = new Date(r.date);
-      const matchFrom = !from || remitDate >= new Date(from);
-      const matchTo = !to || remitDate <= new Date(to + 'T23:59:59');
+      // r.date is a plain YYYY-MM-DD, so compare as strings (no timezone shifts).
+      const day = String(r.date).slice(0, 10);
+      const inRange = day >= from && day <= to;
 
-      return matchSearch && matchStatus && matchFrom && matchTo;
+      return matchSearch && matchStatus && inRange;
     });
   });
 
@@ -137,19 +137,10 @@ export class Remittances implements OnInit {
     this.statusFilter.set((e.target as HTMLSelectElement).value);
     this.currentPage.set(1);
   }
-  onDateFromChange(e: Event): void {
-    this.dateFrom.set((e.target as HTMLInputElement).value);
-    this.currentPage.set(1);
-  }
-  onDateToChange(e: Event): void {
-    this.dateTo.set((e.target as HTMLInputElement).value);
-    this.currentPage.set(1);
-  }
-  clearDateFilters(): void {
-    this.dateFrom.set('');
-    this.dateTo.set('');
-    this.currentPage.set(1);
-  }
+
+  /** Label + dates of the range being shown, e.g. "Last 7 Days". */
+  rangeLabel = computed(() => this.rangeState.remittanceRangeLabel());
+  rangeChosen = computed(() => this.rangeState.hasChosenRange());
 
   setSort(field: SortField): void {
     if (this.sortField() === field) this.sortDir.update((d) => (d === 'asc' ? 'desc' : 'asc'));

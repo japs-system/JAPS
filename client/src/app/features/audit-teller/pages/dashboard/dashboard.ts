@@ -3,8 +3,12 @@ import { HttpClient } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { environment } from '../../../../../environments/environment';
+import {
+  DashboardRangePreset,
+  DashboardRangeService,
+} from '../../../../core/services/dashboard-range.service';
 
-export type AuditRangePreset = 'today' | '7d' | 'month' | '30d' | 'custom';
+export type AuditRangePreset = DashboardRangePreset;
 
 interface DashboardStats {
   pending: number;
@@ -57,6 +61,7 @@ interface AuditorActivity {
 })
 export class AuditTellerDashboard implements OnInit {
   private http = inject(HttpClient);
+  private rangeState = inject(DashboardRangeService);
   private readonly API = `${environment.apiUrl}/api/audit-teller`;
 
   // All-time counts (the Pending card is the teller's queue, so it ignores the range).
@@ -67,15 +72,17 @@ export class AuditTellerDashboard implements OnInit {
   remittancesLoading = signal(false);
 
   ngOnInit(): void {
+    this.rangeState.syncPreset('7d');
     this.loadStats();
     this.loadRemittances();
   }
 
   // ── Date range filter (same presets as the owner dashboard) ─────────────
-  rangePreset = signal<AuditRangePreset>('7d');
-  customFrom = signal<string>('');
-  customTo = signal<string>('');
-  private appliedCustom = signal<{ from: string; to: string } | null>(null);
+  // Held in DashboardRangeService so it stays when switching tabs (and is shared with
+  // the Remittances page). Cleared on reload or logout.
+  rangePreset = this.rangeState.preset;
+  customFrom = this.rangeState.customFrom;
+  customTo = this.rangeState.customTo;
 
   readonly RANGE_PRESETS: { value: AuditRangePreset; label: string }[] = [
     { value: 'today', label: 'Today' },
@@ -86,7 +93,7 @@ export class AuditTellerDashboard implements OnInit {
   ];
 
   setRangePreset(preset: AuditRangePreset): void {
-    this.rangePreset.set(preset);
+    this.rangeState.selectPreset(preset);
   }
 
   onCustomFromInput(e: Event): void {
@@ -98,9 +105,7 @@ export class AuditTellerDashboard implements OnInit {
   }
 
   applyCustomRange(): void {
-    if (this.customFrom() && this.customTo()) {
-      this.appliedCustom.set({ from: this.customFrom(), to: this.customTo() });
-    }
+    this.rangeState.applyCustom();
   }
 
   // ── Date helpers (local calendar days, never toISOString — that shifts the day in UTC+8) ──
@@ -124,33 +129,13 @@ export class AuditTellerDashboard implements OnInit {
     return isNaN(d.getTime()) ? value.slice(0, 10) : this.localDateStr(d);
   }
 
-  /** The resolved { from, to } for the selected preset. */
+  /** The chosen range; the last 7 days until the teller picks one. */
   range = computed(() => {
+    const chosen = this.rangeState.appliedRange();
+    if (chosen) return chosen;
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const back = (n: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate() - n);
-    let from = back(6);
-    let to = today;
-    switch (this.rangePreset()) {
-      case 'today':
-        from = today;
-        break;
-      case '30d':
-        from = back(29);
-        break;
-      case 'month':
-        from = new Date(today.getFullYear(), today.getMonth(), 1);
-        break;
-      case 'custom': {
-        const c = this.appliedCustom();
-        if (c) {
-          from = this.parseKey(c.from);
-          to = this.parseKey(c.to);
-        }
-        break;
-      }
-    }
-    if (from > to) [from, to] = [to, from];
+    const to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const from = new Date(to.getFullYear(), to.getMonth(), to.getDate() - 6);
     return { from: this.localDateStr(from), to: this.localDateStr(to) };
   });
 
