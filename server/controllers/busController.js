@@ -395,6 +395,31 @@ const formatDepartureSlot = (value) =>
     timeZone: "Asia/Manila",
   });
 
+// Keep PostgreSQL's auto-generated Trip ID sequence in sync with the table.
+// This fixes duplicate primary-key errors when older imports/manual inserts
+// have moved the table IDs ahead of the sequence counter.
+const syncTripIdSequence = async () => {
+  const table = Trip.getTableName();
+  const queryInterface = Trip.sequelize.getQueryInterface();
+  const quotedTable = queryInterface.quoteTable(table);
+  const primaryKey = Trip.primaryKeyField || Trip.primaryKeyAttribute || "id";
+  const primaryKeyField = Trip.rawAttributes?.[primaryKey]?.field || primaryKey;
+  const quotedPrimaryKey = queryInterface.quoteIdentifier(primaryKeyField);
+  const tableReference = (typeof table === "string"
+    ? table
+    : `${table.schema ? `${table.schema}.` : ""}${table.tableName}`
+  ).replace(/'/g, "''");
+  const columnReference = String(primaryKeyField).replace(/'/g, "''");
+
+  await Trip.sequelize.query(`
+    SELECT setval(
+      pg_get_serial_sequence('${tableReference}', '${columnReference}'),
+      COALESCE((SELECT MAX(${quotedPrimaryKey}) FROM ${quotedTable}), 0) + 1,
+      false
+    )
+  `);
+};
+
 // POST /api/buses/trips
 const createTrip = async (req, res) => {
   const { bus_id, route_id, trip_number, departure_time } = req.body;
@@ -427,6 +452,8 @@ const createTrip = async (req, res) => {
       message: `Bus ${bus.bus_number} already has a trip scheduled for ${formatDepartureSlot(departureDate)}. Please choose another departure time.`,
     });
   }
+
+  await syncTripIdSequence();
 
   const trip = await Trip.create({
     bus_id,
@@ -568,6 +595,9 @@ const createTripsBulk = async (req, res) => {
       : 1;
 
     const created = [];
+
+    // Repair the Trip primary-key sequence before inserting new records.
+    await syncTripIdSequence();
 
     for (const tripData of parsedTrips) {
       const trip = await Trip.create({
