@@ -20,7 +20,6 @@ const {
 } = require("../config/mailer");
 
 const { findRemittanceDetail } = require("../services/remittance/findRemittanceDetail");
-const { nextRemittanceId } = require("../services/remittance/nextRemittanceId");
 const {
   createNotification,
   notifyOwners,
@@ -37,11 +36,6 @@ const peso = (n) =>
 const MAX_REMITTANCE_AMOUNT = 99999.99;
 const isValidRemittanceAmount = (n) =>
   Number.isFinite(n) && n >= 0 && n <= MAX_REMITTANCE_AMOUNT && Math.round(n * 100) / 100 === n;
-
-// Calendar date (YYYY-MM-DD) of a timestamp in Philippine time — used to check that a
-// trip belongs to the remittance date being submitted.
-const manilaDateKey = (value) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(value));
 
 // Emails the conductor a confirmation + summary of the remittance they just (re)submitted.
 const notifyConductorOfSubmission = (remittance, isResubmission) =>
@@ -334,66 +328,35 @@ const getTripPassengerCounts = async (req, res) => {
 };
 
 // POST /api/conductor/trips/:id/passenger-counts
-// Save/update passenger counts for a trip. Validated, all-or-nothing, and locked once the
-// trip belongs to a submitted/approved remittance.
+// Save/update passenger counts for a trip
 const savePassengerCounts = async (req, res) => {
-  const { counts } = req.body; // Array of { category, count }
-  if (!Array.isArray(counts)) {
-    return res.status(400).json({ message: "counts must be a list of { category, count }." });
-  }
-  const seen = new Set();
-  for (const item of counts) {
-    const n = Number(item?.count);
-    if (!PASSENGER_CATEGORIES.includes(item?.category)) {
-      return res.status(400).json({ message: "Invalid passenger category." });
-    }
-    if (!Number.isInteger(n) || n < 0 || n > 9999) {
-      return res.status(400).json({ message: "Passenger counts must be whole numbers from 0 to 9,999." });
-    }
-    if (seen.has(item.category)) {
-      return res.status(400).json({ message: `Duplicate category "${item.category}".` });
-    }
-    seen.add(item.category);
-  }
-
-  const transaction = await sequelize.transaction();
   try {
     const { id } = req.params;
+    const { counts } = req.body; // Array of { category, count }
     const conductorId = req.user.id;
 
-    // Lock the trip so a concurrent remittance submission can't slip in between.
     const trip = await Trip.findOne({
       where: { id, conductor_id: conductorId },
-      lock: transaction.LOCK.UPDATE,
-      transaction,
     });
     if (!trip) {
-      await transaction.rollback();
       return res.status(404).json({ message: "Trip not found." });
     }
-    if (trip.remittance_id) {
-      await transaction.rollback();
-      return res.status(409).json({
-        message: "This trip is already part of a remittance — its passenger counts can no longer be changed.",
-      });
-    }
 
-    // Replace the counts atomically: if anything fails the old counts are kept.
-    await PassengerCount.destroy({ where: { trip_id: id }, transaction });
+    // Delete existing passenger counts for this trip to overwrite
+    await PassengerCount.destroy({ where: { trip_id: id } });
+
     const createdCounts = [];
     for (const item of counts) {
-      createdCounts.push(
-        await PassengerCount.create(
-          { trip_id: id, category: item.category, count: Number(item.count) },
-          { transaction },
-        ),
-      );
+      const pc = await PassengerCount.create({
+        trip_id: id,
+        category: item.category,
+        count: item.count,
+      });
+      createdCounts.push(pc);
     }
 
-    await transaction.commit();
     return res.json(createdCounts);
   } catch (error) {
-    await transaction.rollback();
     console.error("Error saving passenger counts:", error);
     return res.status(500).json({ message: "Internal server error." });
   }
@@ -480,22 +443,13 @@ const printTicket = async (req, res) => {
     const { boarding_km, dropping_km } = req.body;
     const conductorId = req.user.id;
 
-    // Row lock: concurrent ticket requests for the same trip queue up here, so each one
-    // reads the previous ticket number / grand total only after the other has committed.
     const trip = await Trip.findOne({
       where: { id, conductor_id: conductorId },
-      lock: transaction.LOCK.UPDATE,
       transaction,
     });
     if (!trip) {
       await transaction.rollback();
       return res.status(404).json({ message: "Trip not found." });
-    }
-    if (trip.remittance_id) {
-      await transaction.rollback();
-      return res.status(409).json({
-        message: "This trip is already part of a remittance — no more tickets can be issued.",
-      });
     }
 
     const route = await Route.findByPk(trip.route_id, { transaction });
@@ -574,7 +528,6 @@ const printTicket = async (req, res) => {
 
     // 1. Auto-generate ticket number (last for this trip + 1, starting at 1).
     // ticket_number is a STRING column, so order numerically rather than lexically.
-    // The trip row is locked above, so no other request can read the same "last" ticket.
     const lastTicket = await Ticket.findOne({
       where: { trip_id: id },
       order: [[sequelize.cast(sequelize.col("ticket_number"), "INTEGER"), "DESC"]],
@@ -792,7 +745,7 @@ const submitRemittance = async (req, res) => {
       conductor_officer_share = 0,
     } = req.body;
 
-    if (!bus_id || !driver_id || !date || !Array.isArray(trip_ids) || trip_ids.length === 0) {
+    if (!bus_id || !driver_id || !date || !trip_ids || trip_ids.length === 0) {
       await transaction.rollback();
       return res
         .status(400)
@@ -817,24 +770,12 @@ const submitRemittance = async (req, res) => {
       return res.status(400).json({ message: "Amounts must be 0 to 99,999.99, with at most 2 decimal places." });
     }
 
-    // 1. Load the trips being remitted — and validate every one of them. The rows are
-    //    locked so a second submission (or a ticket / passenger-count edit) can't change
-    //    them meanwhile. A trip only qualifies when it belongs to this conductor, this bus
-    //    and this driver, and is not already part of another remittance.
-    const requestedIds = [...new Set(trip_ids.map(Number))];
-    if (requestedIds.some((n) => !Number.isInteger(n) || n <= 0)) {
-      await transaction.rollback();
-      return res.status(400).json({ message: "Invalid trip selection." });
-    }
+    // 1. Fetch completed trips to calculate actual gross income
     const trips = await Trip.findAll({
       where: {
-        id: { [Op.in]: requestedIds },
+        id: { [Op.in]: trip_ids },
         conductor_id: conductorId,
-        bus_id,
-        driver_id,
-        remittance_id: null,
       },
-      lock: transaction.LOCK.UPDATE,
       transaction,
     });
 
@@ -843,22 +784,6 @@ const submitRemittance = async (req, res) => {
       return res
         .status(404)
         .json({ message: "No valid trips found for remittance." });
-    }
-    // Every submitted ID must have come back as a valid trip.
-    if (trips.length !== requestedIds.length) {
-      await transaction.rollback();
-      return res.status(400).json({
-        message:
-          "Some selected trips are not yours, belong to another bus or driver, or were already remitted.",
-      });
-    }
-    // Every trip must belong to the remittance date (Philippine calendar day).
-    const wrongDate = trips.find((t) => manilaDateKey(t.departure_time) !== String(date).slice(0, 10));
-    if (wrongDate) {
-      await transaction.rollback();
-      return res.status(400).json({
-        message: `Trip #${wrongDate.trip_number} departed on a different date than this remittance (${date}).`,
-      });
     }
 
     const manualError = await applyManualTripEntries(
@@ -903,12 +828,9 @@ const submitRemittance = async (req, res) => {
 
     const netCollection = netGross - totalLess;
 
-    // Create Remittance record. Its ID is <year><running number> (e.g. 202617845); the
-    // counter row stays locked until this transaction ends, so a failed submission
-    // doesn't use up a number.
+    // Create Remittance record
     const remittance = await Remittance.create(
       {
-        id: await nextRemittanceId(sequelize, transaction),
         bus_id,
         driver_id,
         conductor_id: conductorId,
@@ -932,17 +854,11 @@ const submitRemittance = async (req, res) => {
       { transaction },
     );
 
-    // Link exactly the validated trips to this remittance (never the raw IDs from the request)
-    const [linked] = await Trip.update(
+    // Link trips to this remittance
+    await Trip.update(
       { remittance_id: remittance.id },
-      {
-        where: { id: { [Op.in]: trips.map((t) => t.id) }, remittance_id: null },
-        transaction,
-      },
+      { where: { id: { [Op.in]: trip_ids } }, transaction },
     );
-    if (linked !== trips.length) {
-      throw new Error("Trips changed while submitting the remittance.");
-    }
 
     // Create expenses
     for (const exp of expenses) {

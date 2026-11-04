@@ -61,20 +61,18 @@ router.get("/dashboard", async (req, res) => {
     const prevRangeStart = new Date(prevRangeEnd.getTime() - rangeMs);
 
     // ── KPI: Net gross within the selected range ───────────────────────────
-    // Business date = the remittance's operating `date` (same as every other revenue
-    // figure here), not when it happened to be submitted.
     const netGrossInRange =
       (await Remittance.sum("net_gross", {
         where: {
           status: "approved",
-          date: { [Op.between]: [rangeFromKey, rangeToKey] },
+          submitted_at: { [Op.between]: [rangeStart, rangeEnd] },
         },
       })) || 0;
     const netGrossPrevRange =
       (await Remittance.sum("net_gross", {
         where: {
           status: "approved",
-          date: { [Op.between]: [localKey(prevRangeStart), localKey(prevRangeEnd)] },
+          submitted_at: { [Op.between]: [prevRangeStart, prevRangeEnd] },
         },
       })) || 0;
 
@@ -273,31 +271,30 @@ router.get("/dashboard", async (req, res) => {
               COALESCE(SUM(pc.count),0) AS total
        FROM trips t
        LEFT JOIN passenger_counts pc ON pc.trip_id = t.id
-       WHERE t.departure_time >= :since AND t.departure_time <= :until
+       WHERE t.departure_time >= :since
        GROUP BY EXTRACT(MONTH FROM t.departure_time), EXTRACT(DOW FROM t.departure_time)
        ORDER BY month ASC`,
       {
-        // Upper bound: scheduled future trips must not leak into the comparison.
-        replacements: { since: twelveWeeksAgo, until: now },
+        replacements: { since: twelveWeeksAgo },
         type: sequelize.QueryTypes.SELECT,
       },
     );
 
-    // ── Remittance trend (last 12 months, by remittance date) ─────────────
+    // ── Remittance trend (last 12 months) ─────────────────────────────────
     const twelveMonthsAgo = new Date(now);
     twelveMonthsAgo.setMonth(now.getMonth() - 11);
     const remittanceTrend = await sequelize.query(
-      `SELECT EXTRACT(YEAR FROM date) AS year,
-              EXTRACT(MONTH FROM date) AS month,
+      `SELECT EXTRACT(YEAR FROM submitted_at) AS year,
+              EXTRACT(MONTH FROM submitted_at) AS month,
               SUM(net_collection) AS net_collection,
               SUM(net_collection + cash_deposit) AS total_revenue,
               SUM(gross_income) AS gross_income
        FROM remittances
-       WHERE status = 'approved' AND date >= :since
-       GROUP BY EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)
+       WHERE status = 'approved' AND submitted_at >= :since
+       GROUP BY EXTRACT(YEAR FROM submitted_at), EXTRACT(MONTH FROM submitted_at)
        ORDER BY year ASC, month ASC`,
       {
-        replacements: { since: localKey(twelveMonthsAgo) },
+        replacements: { since: twelveMonthsAgo },
         type: sequelize.QueryTypes.SELECT,
       },
     );
@@ -375,10 +372,6 @@ router.get("/dashboard", async (req, res) => {
       passengerGrowthPct: passengerGrowth,
       netGrossInRange,
       netGrossPrevRange,
-      // Total revenue (cash deposit + net collection) by remittance date — the figure the
-      // revenue insight should compare once buildInsights reads these two names.
-      revenueInRange: totalRevenueInRange,
-      revenuePrevRange: totalRevenuePrevRange,
       routeProfit,
       peakHours: peakHoursRaw,
       weekdayWeekend: weekdayWeekendRaw,
