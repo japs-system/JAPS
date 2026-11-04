@@ -116,6 +116,7 @@ export class Dashboard implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.rangeState.syncPreset('month');
     this.fore.set(null);
     this.http
       .get<ForecastData>(`${this.API}/forecast`, { withCredentials: true })
@@ -298,6 +299,9 @@ export class Dashboard implements OnInit {
       return { hour: r.hour, avg: r.avg, pct: share * 100, level: this.peakLevelByShare(share) };
     });
   });
+
+  /** Peak Hours card: only the busiest hour shows until the other peak hours are expanded. */
+  peakHoursOpen = signal(false);
 
   /** Remittances KPI card: approved revenue / cash received are hidden until expanded. */
   remittanceOpen = signal(false);

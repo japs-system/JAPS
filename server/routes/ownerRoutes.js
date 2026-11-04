@@ -173,24 +173,52 @@ router.get("/dashboard", async (req, res) => {
       },
     );
 
-    // ── Route profitability within the range (via completed trips) ────────
+    // ── Route profitability within the range (approved remittances) ───────
+    // Revenue per route = total revenue (net collection + cash deposit) of the
+    // APPROVED remittances dated in the range, attributed to the routes of the
+    // trips in each remittance. When one remittance covers trips on several
+    // routes, its total is split in proportion to each route's trip totals
+    // (or its trip count if those totals are all zero).
     const routeProfit = await sequelize.query(
-      `SELECT t.route_id, r.origin, r.destination,
-              SUM(t.grand_total) AS revenue,
-              COUNT(t.id) AS trip_count
-       FROM trips t
-       JOIN routes r ON r.id = t.route_id
-       WHERE t.status = 'completed'
-         AND t.departure_time BETWEEN :start AND :end
-       GROUP BY t.route_id, r.origin, r.destination
+      `WITH trip_share AS (
+         SELECT t.remittance_id, t.route_id,
+                SUM(t.grand_total) AS route_gross,
+                COUNT(t.id) AS trips
+         FROM trips t
+         JOIN remittances rm ON rm.id = t.remittance_id
+         WHERE rm.status = 'approved'
+           AND rm.date BETWEEN :from AND :to
+           AND t.status <> 'cancelled'
+         GROUP BY t.remittance_id, t.route_id
+       ),
+       remit_totals AS (
+         SELECT remittance_id,
+                SUM(route_gross) AS gross_all,
+                SUM(trips) AS trips_all
+         FROM trip_share
+         GROUP BY remittance_id
+       )
+       SELECT ts.route_id, r.origin, r.destination,
+              SUM((rm.net_collection + rm.cash_deposit) *
+                  CASE WHEN rt.gross_all > 0
+                       THEN ts.route_gross / rt.gross_all
+                       ELSE ts.trips::numeric / rt.trips_all
+                  END) AS revenue,
+              SUM(ts.trips) AS trip_count
+       FROM trip_share ts
+       JOIN remit_totals rt ON rt.remittance_id = ts.remittance_id
+       JOIN remittances rm ON rm.id = ts.remittance_id
+       JOIN routes r ON r.id = ts.route_id
+       GROUP BY ts.route_id, r.origin, r.destination
        ORDER BY revenue DESC`,
       {
-        replacements: { start: rangeStart, end: rangeEnd },
+        replacements: { from: rangeFromKey, to: rangeToKey },
         type: sequelize.QueryTypes.SELECT,
       },
     );
 
-    // Revenue per stop (where passengers get off) of each route, from ticket fares, for the dropdown.
+    // Revenue per stop (where passengers get off) of each route, from ticket
+    // fares, for the dropdown. Limited to trips of the same approved remittances.
     const stopRevenue = await sequelize.query(
       `SELECT t.route_id,
               COALESCE(NULLIF(tk.dropping_point, ''), 'Unknown') AS stop,
@@ -198,12 +226,14 @@ router.get("/dashboard", async (req, res) => {
               SUM(COALESCE(tk.passenger_count, 1)) AS passengers
        FROM tickets tk
        JOIN trips t ON t.id = tk.trip_id
-       WHERE t.status = 'completed'
-         AND t.departure_time BETWEEN :start AND :end
+       JOIN remittances rm ON rm.id = t.remittance_id
+       WHERE rm.status = 'approved'
+         AND rm.date BETWEEN :from AND :to
+         AND t.status <> 'cancelled'
        GROUP BY t.route_id, COALESCE(NULLIF(tk.dropping_point, ''), 'Unknown')
        ORDER BY revenue DESC`,
       {
-        replacements: { start: rangeStart, end: rangeEnd },
+        replacements: { from: rangeFromKey, to: rangeToKey },
         type: sequelize.QueryTypes.SELECT,
       },
     );
