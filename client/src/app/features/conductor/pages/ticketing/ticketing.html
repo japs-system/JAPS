@@ -320,7 +320,7 @@
       >
         <!-- Store Header -->
         <div class="text-center space-y-1">
-          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-4 w-auto mx-auto" />
+          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-3 w-auto mx-auto" />
           <p class="text-lg"> {{ lastPrintedTicket()?.date | date: 'medium' }}</p>
         </div>
 
@@ -335,10 +335,6 @@
           <div class="flex justify-between gap-2">
             <span>BUS NO:</span>
             <span class="text-right">{{ lastPrintedTicket()?.bus?.bus_number }}</span>
-          </div>
-          <div class="flex justify-between gap-2">
-            <span>PLATE NO:</span>
-            <span class="text-right">{{ lastPrintedTicket()?.bus?.plate_number }}</span>
           </div>
           <div class="flex justify-between gap-2">
             <span>FROM:</span>
@@ -367,7 +363,7 @@
           <div
             class="flex justify-between gap-2 text-2xl font-bold mt-2 pt-2 border-t-2 border-black"
           >
-            <span>TOTAL:</span>
+            <span>Total:</span>
             <span class="text-right font-bold">₱{{ lastPrintedTicket()?.fare | number: '1.2-2' }}</span>
           </div>
         </div>

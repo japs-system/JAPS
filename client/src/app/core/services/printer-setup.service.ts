@@ -22,7 +22,6 @@ export interface ReceiptData {
   dateText: string;
   ticketNumber: string | number;
   busNumber: string;
-  plateNumber: string;
   from: string;
   to: string;
   lines: { label: string; quantity: number; amount: string }[];
@@ -182,7 +181,7 @@ export class PrinterSetupService {
     }
 
     const logo = await this.loadTrimmedLogo();
-    const logoH = 56;
+    const logoH = 40;
     const logoW = logo ? Math.round((logo.width / logo.height) * logoH) : 0;
 
     // Pass 1 measures the height, pass 2 draws it. Same function, so they never disagree.
@@ -239,7 +238,6 @@ export class PrinterSetupService {
 
       text('TICKET NO:', `#${t.ticketNumber}`, 24);
       text('BUS NO:', t.busNumber, 20);
-      text('PLATE NO:', t.plateNumber, 20);
       text('FROM:', t.from, 20);
       text('TO:', t.to, 20);
       rule(true);
@@ -247,7 +245,7 @@ export class PrinterSetupService {
       for (const line of t.lines) text(`${line.label} ×${line.quantity}`, line.amount, 20);
       text('PASSENGERS:', String(t.passengerCount), 20);
       rule(false);
-      text('TOTAL AMOUNT:', t.total, 24, 700);
+      text('Total:', t.total, 24, 700);
       rule(true);
 
       text('Thank you for riding with us!', null, 18, 400, 'center');

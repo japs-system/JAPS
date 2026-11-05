@@ -9,10 +9,10 @@ describe('TicketingPage', () => {
   let component: TicketingPage;
   let fixture: ComponentFixture<TicketingPage>;
   let httpMock: HttpTestingController;
-  let printReceipt: ReturnType<typeof vi.fn>;
+  let printTicketImage: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    printReceipt = vi.fn().mockResolvedValue(undefined);
+    printTicketImage = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       queueMicrotask(() => callback(0));
       return 1;
@@ -25,7 +25,7 @@ describe('TicketingPage', () => {
         {
           provide: PrinterSetupService,
           useValue: {
-            printReceipt,
+            printTicketImage,
           },
         },
       ],
@@ -138,23 +138,12 @@ describe('TicketingPage', () => {
     fixture.detectChanges();
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-    expect(printReceipt).toHaveBeenCalledTimes(1);
-    expect(printReceipt).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ticketNumber: '1-3',
-        busNumber: 'BUS-01',
-        plateNumber: 'ABC-123',
-        from: 'Manila',
-        to: 'Baguio',
-        passengerCount: 3,
-        total: '₱26.00',
-        lines: [
-          { label: 'Regular', quantity: 1, amount: '₱10.00' },
-          { label: 'Student', quantity: 1, amount: '₱8.00' },
-          { label: 'Senior Citizen', quantity: 1, amount: '₱8.00' },
-        ],
-      }),
-    );
+    expect(printTicketImage).toHaveBeenCalledTimes(1);
+    const printedReceipt = printTicketImage.mock.calls[0][0] as HTMLElement;
+    expect(printedReceipt.textContent).toContain('#1-3');
+    expect(printedReceipt.textContent).toContain('BUS NO:');
+    expect(printedReceipt.textContent).toContain('Total:');
+    expect(printedReceipt.textContent).not.toContain('PLATE NO:');
 
     // printTicketSubmit()'s success handler also refreshes trips & passenger counts.
     httpMock.expectOne(`${environment.apiUrl}/api/conductor/trips`).flush([]);

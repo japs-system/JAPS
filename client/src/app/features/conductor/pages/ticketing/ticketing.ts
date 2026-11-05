@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { AlertService } from '../../../../core/services/alert.service';
-import { PrinterSetupService, ReceiptData } from '../../../../core/services/printer-setup.service';
+import { PrinterSetupService } from '../../../../core/services/printer-setup.service';
 import { environment } from '../../../../../environments/environment';
 import { TicketPassengerLine } from '../../../../shared/models/ticket.models';
 
@@ -372,28 +372,15 @@ export class TicketingPage implements OnInit {
   private sendReceiptToPrinter(): void {
     const ticket = this.lastPrintedTicket();
     if (!ticket) return;
-
-    const money = (n: unknown) =>
-      '₱' + Number(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const receipt: ReceiptData = {
-      dateText: new DatePipe('en-US').transform(ticket.date, 'medium') ?? '',
-      ticketNumber: ticket.ticketNumber,
-      busNumber: ticket.bus?.bus_number ?? '',
-      plateNumber: ticket.bus?.plate_number ?? '',
-      from: ticket.boardingPoint ?? '',
-      to: ticket.droppingPoint ?? '',
-      lines: (ticket.passengers ?? []).map((l: TicketPassengerLine) => ({
-        label: this.getCategoryLabel(l.category),
-        quantity: l.quantity,
-        amount: money(l.subtotal),
-      })),
-      passengerCount: ticket.passengerCount,
-      total: money(ticket.fare),
-    };
+    const receiptElement = this.receiptContentRef()?.nativeElement;
+    if (!receiptElement) {
+      this.alertService.error('Printer Error', 'Ticket preview is not available for printing.');
+      return;
+    }
 
     this.isSendingToPrinter.set(true);
     this.printerSetup
-      .printReceipt(receipt)
+      .printTicketImage(receiptElement)
       .catch((err) => {
         this.alertService.error(
           'Printer Error',

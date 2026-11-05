@@ -46,7 +46,7 @@ const notifyConductorOfSubmission = (remittance, isResubmission) =>
         User.findByPk(remittance.conductor_id),
       ]);
       if (!conductor?.email) return;
-      await sendRemittanceReceiptEmail({
+      await sendRemittanceReceiptEmail({ 
         to: conductor.email,
         name: fullName(conductor),
         busLabel: bus?.bus_number ?? String(remittance.bus_id),
