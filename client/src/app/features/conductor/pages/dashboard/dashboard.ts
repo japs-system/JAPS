@@ -67,21 +67,27 @@ export class ConductorDashboard implements OnInit {
   // Today's date string for comparison (local calendar date)
   private todayStr = localDateStr(new Date());
 
-  // Today: earliest departure first (trip 1, 2, 3 …)
+  // Keep the active trip at the top, then show today's remaining trips by departure time.
   todayTrips = computed(() =>
     this.trips()
       .filter((t) => {
         if (!t.departure_time) return false;
         return localDateStr(new Date(t.departure_time)) === this.todayStr;
       })
-      .sort((a, b) => new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime()),
+      .sort(
+        (a, b) =>
+          Number(b.status === 'ongoing') - Number(a.status === 'ongoing') ||
+          new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime(),
+      ),
   );
 
-  // All: latest schedule first
+  // Keep the active trip at the top, then show the latest schedules first.
   allTrips = computed(() =>
     [...this.trips()].sort(
       (a, b) =>
-        new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() || b.id - a.id,
+        Number(b.status === 'ongoing') - Number(a.status === 'ongoing') ||
+        new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() ||
+        b.id - a.id,
     ),
   );
 

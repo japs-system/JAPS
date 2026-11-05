@@ -46,11 +46,13 @@ export class DriverDashboard implements OnInit {
   trips = signal<Trip[]>([]);
   loading = signal(false);
 
-  /** Latest schedule first (newest departure at the top). */
+  /** Active trips first, then the latest schedules. */
   sortedTrips = computed(() =>
     [...this.trips()].sort(
       (a, b) =>
-        new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() || b.id - a.id,
+        Number(b.status === 'ongoing') - Number(a.status === 'ongoing') ||
+        new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() ||
+        b.id - a.id,
     ),
   );
 
