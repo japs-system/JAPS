@@ -320,7 +320,7 @@
       >
         <!-- Store Header -->
         <div class="text-center space-y-1">
-          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-3 w-auto mx-auto" />
+          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-5 w-auto mx-auto" />
           <p class="text-lg"> {{ lastPrintedTicket()?.date | date: 'medium' }}</p>
         </div>
 
@@ -361,10 +361,10 @@
             <span class="text-right">{{ lastPrintedTicket()?.passengerCount }}</span>
           </div>
           <div
-            class="flex justify-between gap-2 text-2xl font-bold mt-2 pt-2 border-t-2 border-black"
+            class="flex justify-between gap-2 text-2xl font-normal mt-2 pt-2 border-t-2 border-black"
           >
             <span>Total:</span>
-            <span class="text-right font-bold">₱{{ lastPrintedTicket()?.fare | number: '1.2-2' }}</span>
+            <span class="text-right font-normal">₱{{ lastPrintedTicket()?.fare | number: '1.2-2' }}</span>
           </div>
         </div>
 
