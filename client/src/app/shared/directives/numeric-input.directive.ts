@@ -19,6 +19,7 @@ import { Directive, ElementRef, Input, inject } from '@angular/core';
 export class NumericInput {
   @Input() maxWhole?: number;
   @Input() maxDecimals?: number;
+  @Input() allowNegative = false;
 
   private readonly el =
     inject<ElementRef<HTMLInputElement>>(ElementRef).nativeElement;
@@ -32,6 +33,16 @@ export class NumericInput {
   onKeydown(e: KeyboardEvent): void {
     // Allow shortcuts and navigation keys.
     if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+
+    if (
+      e.key === '-' &&
+      this.allowNegative &&
+      (this.el.value === '' ||
+        (this.el.selectionStart === 0 && this.el.selectionEnd === this.el.value.length)) &&
+      !this.el.value.startsWith('-')
+    ) {
+      return;
+    }
 
     // Only allow digits and decimal point.
     if (!/[0-9.]/.test(e.key)) {
@@ -47,7 +58,8 @@ export class NumericInput {
   onPaste(e: ClipboardEvent): void {
     const text = e.clipboardData?.getData('text').trim() ?? '';
 
-    if (!/^\d+(\.\d+)?$/.test(text)) {
+    const pattern = this.allowNegative ? /^-?\d+(\.\d+)?$/ : /^\d+(\.\d+)?$/;
+    if (!pattern.test(text)) {
       e.preventDefault();
       return;
     }
@@ -77,9 +89,10 @@ export class NumericInput {
   }
 
   private exceedsLimits(value: string): boolean {
-    if (!/^\d*\.?\d*$/.test(value)) return true;
+    const pattern = this.allowNegative ? /^-?\d*\.?\d*$/ : /^\d*\.?\d*$/;
+    if (!pattern.test(value)) return true;
 
-    const [whole, decimals = ''] = value.split('.');
+    const [whole, decimals = ''] = value.replace(/^-/, '').split('.');
 
     const wholeDigits = whole.replace(/^0+(?=\d)/, '').length;
 

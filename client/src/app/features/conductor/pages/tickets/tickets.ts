@@ -109,7 +109,10 @@ export class TicketsPage implements OnInit {
     return [...this.filtered()].sort((a, b) => {
       let av: any = field === 'category' ? this.passengerSummary(a) : a[field];
       let bv: any = field === 'category' ? this.passengerSummary(b) : b[field];
-      if (field === 'fare' || field === 'ticket_number') {
+      if (field === 'ticket_number') {
+        av = Number(String(av).split('-')[0]);
+        bv = Number(String(bv).split('-')[0]);
+      } else if (field === 'fare') {
         av = Number(av);
         bv = Number(bv);
       }

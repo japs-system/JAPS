@@ -20,7 +20,7 @@ interface ReportSummary {
   rejected: number;
 }
 
-type Preset = 'today' | 'week' | 'month' | 'lastMonth';
+type Preset = 'today' | 'month' | 'lastMonth';
 
 @Component({
   selector: 'app-owner-reports',
@@ -53,10 +53,7 @@ export class OwnerReports implements OnInit {
     const now = new Date();
     let start = new Date(now);
     let end = new Date(now);
-    if (p === 'week') {
-      const dow = (now.getDay() + 6) % 7; // Monday start
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow);
-    } else if (p === 'month') {
+    if (p === 'month') {
       start = new Date(now.getFullYear(), now.getMonth(), 1);
     } else if (p === 'lastMonth') {
       start = new Date(now.getFullYear(), now.getMonth() - 1, 1);

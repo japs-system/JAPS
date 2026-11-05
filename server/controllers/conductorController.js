@@ -176,6 +176,16 @@ const getAssignedTrips = async (req, res) => {
 
     // Default: return all trips assigned to conductor
     const trips = await Trip.findAll({
+      attributes: {
+        include: [
+          [
+            sequelize.literal(
+              '(SELECT COALESCE(SUM(tk.passenger_count), 0) FROM tickets AS tk WHERE tk.trip_id = "Trip"."id")',
+            ),
+            "ticket_passenger_count",
+          ],
+        ],
+      },
       where: { conductor_id: conductorId },
       include: [
         {
@@ -443,10 +453,17 @@ const printTicket = async (req, res) => {
     const trip = await Trip.findOne({
       where: { id, conductor_id: conductorId },
       transaction,
+      lock: transaction.LOCK.UPDATE,
     });
     if (!trip) {
       await transaction.rollback();
       return res.status(404).json({ message: "Trip not found." });
+    }
+    if (trip.status !== "ongoing") {
+      await transaction.rollback();
+      return res.status(400).json({
+        message: "Tickets can only be issued for ongoing trips.",
+      });
     }
 
     const route = await Route.findByPk(trip.route_id, { transaction });
@@ -523,14 +540,20 @@ const printTicket = async (req, res) => {
     const fare = parseFloat(passengers.reduce((sum, p) => sum + p.subtotal, 0).toFixed(2));
     const passengerCount = passengers.reduce((sum, p) => sum + p.quantity, 0);
 
-    // 1. Auto-generate ticket number (last for this trip + 1, starting at 1).
-    // ticket_number is a STRING column, so order numerically rather than lexically.
-    const lastTicket = await Ticket.findOne({
+    // Number passenger tickets consecutively; one group ticket can cover a range.
+    const previousTickets = await Ticket.findAll({
       where: { trip_id: id },
-      order: [[sequelize.cast(sequelize.col("ticket_number"), "INTEGER"), "DESC"]],
+      attributes: ["passenger_count"],
+      order: [["id", "ASC"]],
       transaction,
     });
-    const ticketNumber = lastTicket ? Number(lastTicket.ticket_number) + 1 : 1;
+    const ticketNumberStart =
+      previousTickets.reduce((sum, ticket) => sum + Number(ticket.passenger_count || 0), 0) + 1;
+    const ticketNumberEnd = ticketNumberStart + passengerCount - 1;
+    const ticketNumber =
+      ticketNumberStart === ticketNumberEnd
+        ? String(ticketNumberStart)
+        : `${ticketNumberStart}-${ticketNumberEnd}`;
 
     // 2. Create one ticket record for the whole group
     const ticket = await Ticket.create(
@@ -555,8 +578,8 @@ const printTicket = async (req, res) => {
     const newGrandTotal = Number(trip.grand_total) + Number(fare);
 
     // 4. Update Ticket Number Range
-    const ticketStart = trip.ticket_number_start ?? ticketNumber;
-    const ticketEnd = ticketNumber;
+    const ticketStart = trip.ticket_number_start ?? String(ticketNumberStart);
+    const ticketEnd = String(ticketNumberEnd);
 
     await trip.update(
       {

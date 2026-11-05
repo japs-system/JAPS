@@ -13,6 +13,10 @@ describe('TicketingPage', () => {
 
   beforeEach(async () => {
     printReceipt = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      queueMicrotask(() => callback(0));
+      return 1;
+    });
 
     await TestBed.configureTestingModule({
       imports: [TicketingPage, HttpClientTestingModule],
@@ -46,7 +50,10 @@ describe('TicketingPage', () => {
     await fixture.whenStable();
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    httpMock.verify();
+    vi.unstubAllGlobals();
+  });
 
   it('prints the receipt after a successful ticket submission', async () => {
     component.selectedTripId.set(1);
@@ -72,6 +79,10 @@ describe('TicketingPage', () => {
     // 5 km is past the 4 km base distance: 5 × 2 = ₱10 regular, ₱8 with a 20% discount.
     expect(component.totalPassengers()).toBe(3);
     expect(component.totalFare()).toBe(26);
+    expect(component.ticketNumberPreview()).toBe('1-3');
+    component.passengerCounts.set([{ id: 1, category: 'regular', count: 2 }]);
+    expect(component.ticketNumberPreview()).toBe('3-5');
+    component.passengerCounts.set([]);
 
     component.printTicketSubmit();
 
@@ -87,7 +98,7 @@ describe('TicketingPage', () => {
     });
     req.flush({
       ticket: {
-        ticket_number: 7,
+        ticket_number: '1-3',
         boarding_point: 'Manila',
         dropping_point: 'Baguio',
         distance_km: 5,
@@ -109,7 +120,7 @@ describe('TicketingPage', () => {
     expect(printReceipt).toHaveBeenCalledTimes(1);
     expect(printReceipt).toHaveBeenCalledWith(
       expect.objectContaining({
-        ticketNumber: 7,
+        ticketNumber: '1-3',
         busNumber: 'BUS-01',
         plateNumber: 'ABC-123',
         from: 'Manila',

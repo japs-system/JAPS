@@ -109,10 +109,10 @@ export class RemittanceReviewPage implements OnInit {
     return c !== null && expected > 0 && c > expected * 2;
   });
 
-  /** Negative or non-numeric entries (min="0" doesn't stop typed values). */
+  /** Reject non-numeric values and values outside the supported cash range. */
   cashInvalid = computed(() => {
     const c = this.cashReceived();
-    return c !== null && (!Number.isFinite(c) || c < 0);
+    return c !== null && (!Number.isFinite(c) || Math.abs(c) > 999999.99);
   });
 
   /** saved result for already-reviewed remittances */
@@ -150,11 +150,6 @@ export class RemittanceReviewPage implements OnInit {
   }
 
   this.cashReceived.set(v === '' ? null : Number(v));
-}
-
-/** Blocks characters a number input accepts but a peso amount shouldn't have. */
-blockInvalidKeys(e: KeyboardEvent): void {
-  if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
 }
 
   /** Safe dynamic accessor for RemittanceDetail fields in template loops */

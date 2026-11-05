@@ -766,7 +766,7 @@ const EXPENSE_COLUMNS = [
   ["miscellaneous", "Miscellaneous"],
 ];
 
-function buildDailySheet(wb, buses, rows) {
+function buildDailySheet(wb, buses, rows, busesWithTrips) {
   const PESO = '#,##0.00';
   const ws = wb.addWorksheet("Daily Report", {
     views: [{ state: "frozen", ySplit: 2 }],
@@ -817,6 +817,7 @@ function buildDailySheet(wb, buses, rows) {
   });
 
   buses.forEach((bus, idx) => {
+    const hasTrip = busesWithTrips.has(bus.id);
     const totals = dailyByBus.get(bus.id) || {
       collection: 0,
       remittance: 0,
@@ -826,13 +827,13 @@ function buildDailySheet(wb, buses, rows) {
       bus.bus_number,
       fullName(bus.assignedDriver),
       fullName(bus.assignedConductor),
-      totals.collection,
-      totals.expenses.officer,
-      totals.expenses.toll_fees,
-      totals.expenses.parking,
-      totals.expenses.washing,
-      totals.expenses.diesel,
-      totals.remittance,
+      hasTrip ? totals.collection : "-",
+      hasTrip ? totals.expenses.officer : "-",
+      hasTrip ? totals.expenses.toll_fees : "-",
+      hasTrip ? totals.expenses.parking : "-",
+      hasTrip ? totals.expenses.washing : "-",
+      hasTrip ? totals.expenses.diesel : "-",
+      hasTrip ? totals.remittance : "-",
     ];
     const row = ws.getRow(FIRST_DATA + idx);
     values.forEach((v, i) => {
@@ -1040,7 +1041,24 @@ router.get("/reports/remittances", async (req, res) => {
         ],
         order: [["bus_number", "ASC"]],
       });
-      buildDailySheet(wb, activeBuses, rows);
+      const completedTrips = await Trip.findAll({
+        attributes: ["bus_id"],
+        where: {
+          status: { [Op.in]: ["scheduled", "ongoing", "completed"] },
+          departure_time: {
+            [Op.between]: [
+              new Date(`${range.from}T00:00:00.000+08:00`),
+              new Date(`${range.to}T23:59:59.999+08:00`),
+            ],
+          },
+        },
+      });
+      buildDailySheet(
+        wb,
+        activeBuses,
+        rows,
+        new Set(completedTrips.map((trip) => Number(trip.bus_id))),
+      );
     }
 
     if (!isDaily) {

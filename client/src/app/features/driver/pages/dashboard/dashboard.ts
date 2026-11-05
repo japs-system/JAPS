@@ -26,7 +26,6 @@ export interface Trip {
     id: number;
     first_name: string;
     last_name: string;
-    employee_id: string;
     contact_number: string | null;
   };
 }

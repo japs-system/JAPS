@@ -39,11 +39,7 @@
             >Ticket #</span
           >
           <span class="font-black text-gray-800 text-lg">
-            @if (selectedTrip()?.ticket_number_end) {
-              {{ +selectedTrip()!.ticket_number_end! + 1 }}
-            } @else {
-              1
-            }
+            {{ ticketNumberPreview() }}
           </span>
         </div>
 

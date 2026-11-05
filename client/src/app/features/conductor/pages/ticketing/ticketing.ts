@@ -17,6 +17,7 @@ export interface Trip {
   grand_total: number;
   ticket_number_start: string | null;
   ticket_number_end: string | null;
+  ticket_passenger_count?: number;
   BusModel?: {
     id: number;
     bus_number: string;
@@ -90,6 +91,16 @@ export class TicketingPage implements OnInit {
   trips = signal<Trip[]>([]);
   selectedTripId = signal<number | null>(null);
   selectedTrip = computed(() => this.trips().find((t) => t.id === this.selectedTripId()) || null);
+  ticketNumberPreview = computed(() => {
+    const trip = this.selectedTrip();
+    const issuedPassengers =
+      trip?.ticket_passenger_count ??
+      this.passengerCounts().reduce((sum, item) => sum + Number(item.count), 0);
+    const start = issuedPassengers + 1;
+    const count = this.totalPassengers();
+    const end = start + Math.max(count, 1) - 1;
+    return start === end ? String(start) : `${start}-${end}`;
+  });
   fareSettings = signal<FareSettings | null>(null);
   routeStops = signal<RouteStopPoint[]>([]);
 
@@ -192,8 +203,7 @@ export class TicketingPage implements OnInit {
   loadTrips(callback?: () => void): void {
     this.http.get<Trip[]>(`${this.API}/trips`, { withCredentials: true }).subscribe({
       next: (data) => {
-        // Filter ongoing or completed trips
-        this.trips.set(data.filter((t) => t.status === 'ongoing' || t.status === 'completed'));
+        this.trips.set(data.filter((t) => t.status === 'ongoing'));
         if (callback) callback();
       },
       error: () => this.alertService.error('Error', 'Failed to load assigned trips.'),
@@ -234,12 +244,15 @@ export class TicketingPage implements OnInit {
   }
 
   loadPassengerCounts(tripId: number): void {
+    this.passengerCounts.set([]);
     this.http
       .get<PassengerCount[]>(`${this.API}/trips/${tripId}/passenger-counts`, {
         withCredentials: true,
       })
       .subscribe({
-        next: (data) => this.passengerCounts.set(data),
+        next: (data) => {
+          if (this.selectedTripId() === tripId) this.passengerCounts.set(data);
+        },
       });
   }
 
@@ -304,6 +317,19 @@ export class TicketingPage implements OnInit {
             bus: this.selectedTrip()?.BusModel,
           };
           this.lastPrintedTicket.set(printed);
+          this.trips.update((trips) =>
+            trips.map((trip) =>
+              trip.id === tripId
+                ? {
+                    ...trip,
+                    ticket_number_start: res.trip?.ticket_number_start ?? trip.ticket_number_start,
+                    ticket_number_end: res.trip?.ticket_number_end ?? trip.ticket_number_end,
+                    ticket_passenger_count:
+                      Number(trip.ticket_passenger_count ?? 0) + printed.passengerCount,
+                  }
+                : trip,
+            ),
+          );
           this.showPrintModal.set(true);
           // Ready for the next group: the stops are kept, every passenger count goes back to 0.
           this.ticketForm.get('quantities')?.reset(EMPTY_QUANTITIES);

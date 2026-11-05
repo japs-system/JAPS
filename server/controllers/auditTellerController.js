@@ -16,15 +16,15 @@ const notify = (promise) => promise.catch((err) => console.error("Notification f
 const peso = (n) =>
   `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// Cash received: 0 up to 999,999.99 (6 digits), at most 2 decimal places.
+// Cash received: -999,999.99 to 999,999.99, at most 2 decimal places.
 const MAX_CASH_RECEIVED = 999999.99;
 
 // Converts the teller's "cash received" input to a number, or null when empty.
-// Returns undefined when the value is invalid (not a number, or negative).
+// Returns undefined when the value is invalid or outside the supported range.
 const parseCashReceived = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
-  if (!Number.isFinite(n) || n < 0 || n > MAX_CASH_RECEIVED) return undefined;
+  if (!Number.isFinite(n) || Math.abs(n) > MAX_CASH_RECEIVED) return undefined;
   return Math.round(n * 100) / 100; // 2 decimal places
 };
 
