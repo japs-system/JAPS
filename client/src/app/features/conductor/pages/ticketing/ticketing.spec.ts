@@ -66,6 +66,7 @@ describe('TicketingPage', () => {
         grand_total: 0,
         ticket_number_start: null,
         ticket_number_end: null,
+        ticket_passenger_count: '0',
         BusModel: { id: 1, bus_number: 'BUS-01', plate_number: 'ABC-123', capacity: 40 },
         Route: { id: 1, origin: 'Manila', destination: 'Baguio', distance_km: 250 },
       },
@@ -80,9 +81,29 @@ describe('TicketingPage', () => {
     expect(component.totalPassengers()).toBe(3);
     expect(component.totalFare()).toBe(26);
     expect(component.ticketNumberPreview()).toBe('1-3');
-    component.passengerCounts.set([{ id: 1, category: 'regular', count: 2 }]);
-    expect(component.ticketNumberPreview()).toBe('3-5');
-    component.passengerCounts.set([]);
+
+    component.trips.update((trips) =>
+      trips.map((trip) => ({ ...trip, ticket_passenger_count: '3' })),
+    );
+    component.ticketForm.patchValue({
+      quantities: { regular: 1, student: 0, senior_citizen: 0, pwd: 0 },
+    });
+    expect(component.ticketNumberPreview()).toBe('4');
+
+    component.trips.update((trips) =>
+      trips.map((trip) => ({ ...trip, ticket_passenger_count: '4' })),
+    );
+    component.ticketForm.patchValue({
+      quantities: { regular: 0, student: 1, senior_citizen: 1, pwd: 0 },
+    });
+    expect(component.ticketNumberPreview()).toBe('5-6');
+
+    component.trips.update((trips) =>
+      trips.map((trip) => ({ ...trip, ticket_passenger_count: '0' })),
+    );
+    component.ticketForm.patchValue({
+      quantities: { regular: 1, student: 1, senior_citizen: 1, pwd: 0 },
+    });
 
     component.printTicketSubmit();
 

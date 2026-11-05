@@ -17,7 +17,7 @@ export interface Trip {
   grand_total: number;
   ticket_number_start: string | null;
   ticket_number_end: string | null;
-  ticket_passenger_count?: number;
+  ticket_passenger_count?: number | string;
   BusModel?: {
     id: number;
     bus_number: string;
@@ -94,7 +94,7 @@ export class TicketingPage implements OnInit {
   ticketNumberPreview = computed(() => {
     const trip = this.selectedTrip();
     const issuedPassengers =
-      trip?.ticket_passenger_count ??
+      Number(trip?.ticket_passenger_count) ||
       this.passengerCounts().reduce((sum, item) => sum + Number(item.count), 0);
     const start = issuedPassengers + 1;
     const count = this.totalPassengers();
