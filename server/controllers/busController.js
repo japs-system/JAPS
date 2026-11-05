@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { BusInfo, User, Trip, Route, CrewAssignment } = require("../models");
+const { BusInfo, User, Trip, Route, CrewAssignment, BusCrewHistory } = require("../models");
 const {
   fullName,
   sendTripScheduledEmail,
@@ -362,7 +362,7 @@ const createTrip = async (req, res) => {
 };
 
 // POST /api/buses/trips/bulk — create multiple trips, trip numbers auto-assigned
-const createTripsBulk = async (req, res) => {
+const createTripsBulkInner = async (req, res) => {
   const { bus_id, driver_id, conductor_id, trips } = req.body;
   // trips = [{ route_id, departure_time }]
   if (
@@ -481,6 +481,17 @@ const createTripsBulk = async (req, res) => {
   );
 
   return res.status(201).json(created);
+};
+
+// Shows the real reason when scheduling fails (also written to the server log).
+const createTripsBulk = async (req, res) => {
+  try {
+    return await createTripsBulkInner(req, res);
+  } catch (error) {
+    console.error("Bulk schedule error:", error);
+    if (res.headersSent) return;
+    return res.status(500).json({ message: `Could not schedule trips: ${error.message}` });
+  }
 };
 
 // DELETE /api/buses/trips/:id
