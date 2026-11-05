@@ -753,9 +753,7 @@ async function loadReport(from, to) {
   return { rows, approved, summary };
 }
 
-// Daily report laid out like the paper Teller's Report: one row per bus with
-// gross income, one column per expense type, then the totals and the review
-// status. The TOTAL row sums APPROVED remittances only (live SUMIF formulas).
+// Daily report: one row per active bus with its assigned crew and remittance totals.
 const EXPENSE_COLUMNS = [
   ["officer", "Officer / Police"],
   ["toll_fees", "Toll Fees"],
@@ -768,163 +766,89 @@ const EXPENSE_COLUMNS = [
   ["miscellaneous", "Miscellaneous"],
 ];
 
-function buildDailySheet(wb, rows, day) {
+function buildDailySheet(wb, buses, rows) {
   const PESO = '#,##0.00';
-  const ws = wb.addWorksheet("Teller's Report", {
-    views: [{ state: "frozen", xSplit: 3, ySplit: 7 }],
+  const ws = wb.addWorksheet("Daily Report", {
+    views: [{ state: "frozen", ySplit: 2 }],
     pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
 
   const heads = [
-    "Bus #", "Driver", "Conductor", "Gross Income",
-    ...EXPENSE_COLUMNS.map((c) => c[1]),
-    "Total Expenses", "Net Gross", "Driver Commission", "Conductor Commission",
-    "Net Collection", "Cash Deposit", "Total Revenue", "Cash Remitted", "Status",
+    "Bus No.", "Driver", "Conductor", "Collection", "Officer", "Toll Fee",
+    "Parking", "Bus Washing", "Diesel", "Remittance",
   ];
-  const lastCol = heads.length;
-  const colL = (n) => ws.getColumn(n).letter;
-  const statusCol = lastCol;
-  const FIRST_DATA = 8;
-
-  // Title block
-  const titles = [
-    ["JAPS TRANSPORT", { bold: true, size: 16 }],
-    ["Batangas/Calamba Japs Transport And General Services Inc.", { bold: true, size: 11 }],
-    ["Mapulo, Taysan, Batangas", { size: 11 }],
-    ["Teller's Report", { bold: true, size: 14 }],
-    [
-      new Date(`${day}T00:00:00`).toLocaleDateString("en-US", {
-        weekday: "long", year: "numeric", month: "long", day: "numeric",
-      }),
-      { italic: true, size: 11 },
-    ],
-  ];
-  titles.forEach(([text, font], i) => {
-    ws.mergeCells(i + 1, 1, i + 1, 8);
-    const c = ws.getCell(i + 1, 1);
-    c.value = text;
-    c.font = font;
-    c.alignment = { horizontal: "left" };
-  });
-
-  // Header row (row 7)
-  const hr = ws.getRow(7);
+  const FIRST_DATA = 3;
+  const hr = ws.getRow(2);
   heads.forEach((h, i) => (hr.getCell(i + 1).value = h));
-  hr.height = 42;
+  hr.height = 24;
   hr.eachCell((c) => {
-    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E5AAA" } };
+    c.font = { bold: true, size: 11, color: { argb: "FF0070C0" } };
     c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-    c.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+    c.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" },
+    };
   });
 
-  ws.getColumn(1).width = 10;
-  ws.getColumn(2).width = 20;
-  ws.getColumn(3).width = 20;
-  for (let i = 4; i < lastCol; i++) ws.getColumn(i).width = 14;
-  ws.getColumn(statusCol).width = 12;
-
-  const statusLabel = { submitted: "Pending", approved: "Approved", rejected: "Rejected" };
+  [12, 20, 20, 16, 13, 13, 13, 15, 13, 16].forEach(
+    (width, i) => (ws.getColumn(i + 1).width = width),
+  );
   const thin = { style: "thin", color: { argb: "FF9CA3AF" } };
   const box = { top: thin, bottom: thin, left: thin, right: thin };
-
-  rows.forEach((r, idx) => {
-    const byType = {};
-    (r.RemittanceExpenses || []).forEach((e) => {
-      byType[e.expense_type] = (byType[e.expense_type] || 0) + num(e.amount);
-    });
-    // Any expense type not in the fixed list goes into Miscellaneous.
-    const known = new Set(EXPENSE_COLUMNS.map((c) => c[0]));
-    Object.keys(byType).forEach((k) => {
-      if (!known.has(k)) {
-        byType.miscellaneous = (byType.miscellaneous || 0) + byType[k];
-        delete byType[k];
+  const expensesByType = ["officer", "toll_fees", "parking", "washing", "diesel"];
+  const dailyByBus = new Map();
+  rows.forEach((r) => {
+    let totals = dailyByBus.get(r.bus_id);
+    if (!totals) {
+      totals = { collection: 0, remittance: 0, expenses: Object.fromEntries(expensesByType.map((type) => [type, 0])) };
+      dailyByBus.set(r.bus_id, totals);
+    }
+    totals.collection += num(r.net_gross);
+    if (r.cash_received !== null && r.cash_received !== undefined) {
+      totals.remittance += num(r.cash_received);
+    }
+    (r.RemittanceExpenses || []).forEach((expense) => {
+      if (Object.hasOwn(totals.expenses, expense.expense_type)) {
+        totals.expenses[expense.expense_type] += num(expense.amount);
       }
     });
+  });
 
-    const gross = num(r.gross_income);
-    const totalExp = num(r.total_expenses);
-    const vals = [
-      r.BusModel ? r.BusModel.bus_number : "",
-      fullName(r.driver),
-      fullName(r.conductor),
-      gross,
-      ...EXPENSE_COLUMNS.map((c) => byType[c[0]] || 0),
-      totalExp,
-      gross - totalExp,
-      Math.round(num(r.driver_commission)),
-      Math.round(num(r.conductor_commission)),
-      num(r.net_collection),
-      num(r.cash_deposit),
-      num(r.net_collection) + num(r.cash_deposit),
-      r.cash_received == null ? null : num(r.cash_received),
-      statusLabel[r.status] || r.status,
+  buses.forEach((bus, idx) => {
+    const totals = dailyByBus.get(bus.id) || {
+      collection: 0,
+      remittance: 0,
+      expenses: Object.fromEntries(expensesByType.map((type) => [type, 0])),
+    };
+    const values = [
+      bus.bus_number,
+      fullName(bus.assignedDriver),
+      fullName(bus.assignedConductor),
+      totals.collection,
+      totals.expenses.officer,
+      totals.expenses.toll_fees,
+      totals.expenses.parking,
+      totals.expenses.washing,
+      totals.expenses.diesel,
+      totals.remittance,
     ];
     const row = ws.getRow(FIRST_DATA + idx);
-    vals.forEach((v, i) => {
+    values.forEach((v, i) => {
       const c = row.getCell(i + 1);
       c.value = v;
       c.border = box;
-      if (i >= 3 && i < lastCol - 1) {
+      if (i >= 3) {
         c.numFmt = PESO;
         c.alignment = { horizontal: "right" };
       }
-      if (i === lastCol - 1) c.alignment = { horizontal: "center" };
     });
   });
-
-  const lastData = FIRST_DATA + Math.max(rows.length, 1) - 1;
-  if (!rows.length) {
-    ws.mergeCells(FIRST_DATA, 1, FIRST_DATA, lastCol);
-    const c = ws.getCell(FIRST_DATA, 1);
-    c.value = "No remittances for this day.";
-    c.font = { italic: true, color: { argb: "FF6B7280" } };
-    c.alignment = { horizontal: "center" };
-  }
-
-  // TOTAL row (approved only)
-  const totalRowNo = lastData + 1;
-  const tr = ws.getRow(totalRowNo);
-  ws.mergeCells(totalRowNo, 1, totalRowNo, 3);
-  tr.getCell(1).value = "TOTAL (approved only)";
-  tr.getCell(1).alignment = { horizontal: "center" };
-  const approvedRows = rows.filter((r) => r.status === "approved");
-  for (let i = 4; i < lastCol; i++) {
-    const L = colL(i);
-    const c = tr.getCell(i);
-    if (rows.length) {
-      // Cache the computed value so viewers that don't recalculate still show it.
-      let result = 0;
-      approvedRows.forEach((r) => {
-        const idx = rows.indexOf(r);
-        const v = ws.getRow(FIRST_DATA + idx).getCell(i).value;
-        result += typeof v === "number" ? v : 0;
-      });
-      c.value = {
-        formula: `SUMIF($${colL(statusCol)}$${FIRST_DATA}:$${colL(statusCol)}$${lastData},"Approved",${L}${FIRST_DATA}:${L}${lastData})`,
-        result,
-      };
-    } else {
-      c.value = 0;
-    }
-    c.numFmt = PESO;
-    c.alignment = { horizontal: "right" };
-  }
-  tr.eachCell({ includeEmpty: true }, (c) => {
-    c.font = { bold: true };
-    c.border = { top: { style: "medium" }, bottom: { style: "double" }, left: thin, right: thin };
-    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8F0FB" } };
-  });
-
-  const note = ws.getRow(totalRowNo + 2);
-  ws.mergeCells(totalRowNo + 2, 1, totalRowNo + 2, 10);
-  note.getCell(1).value =
-    "Totals count approved remittances only. Pending and rejected remittances are listed for reference.";
-  note.getCell(1).font = { italic: true, color: { argb: "FF6B7280" } };
 }
 
-// ── Daily sheet: one row per day, one column per bus (Total Revenue of the
-// approved remittance), then TOTAL, DAILY EXPENSES, NET COLLECTION, NSE, CASH LEFT.
+// ── Daily sheet: one row per day, one column per bus (Gross Income of approved
+// remittances), then TOTAL, DAILY EXPENSES, NET COLLECTION, NSE, TOTAL REVENUE.
 const dayList = (from, to) => {
   const out = [];
   for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1))
@@ -948,7 +872,7 @@ function buildMonthlyDailySheet(wb, approved, from, to) {
   const cTotal = nb + 2, cExp = nb + 3, cNet = nb + 4, cNse = nb + 5, cLeft = nb + 6;
   const L = (n) => ws.getColumn(n).letter;
 
-  const heads = ["DAY", ...buses.map((b) => Number(b[1]) || b[1]), "TOTAL", "DAILY EXPENSES", "NET COLLECTION", "NSE", "CASH LEFT"];
+  const heads = ["DAY", ...buses.map((b) => Number(b[1]) || b[1]), "TOTAL", "DAILY EXPENSES", "NET COLLECTION", "NSE", "TOTAL REVENUE"];
   const hr = ws.getRow(3);
   heads.forEach((h, i) => {
     const c = hr.getCell(i + 1);
@@ -960,15 +884,17 @@ function buildMonthlyDailySheet(wb, approved, from, to) {
   ws.getColumn(1).width = 8;
   for (let i = 2; i <= cLeft; i++) ws.getColumn(i).width = i > nb + 1 ? 16 : 12;
 
-  const cell = {}; // `${day}|${busId}` -> total revenue
+  const cell = {}; // `${day}|${busId}` -> gross income
   const exp = {};
   const nc = {};
+  const cashDeposit = {};
   approved.forEach((r) => {
     const d = dateKey(r.date);
     const k = `${d}|${r.BusModel ? r.BusModel.id : ""}`;
-    cell[k] = (cell[k] || 0) + num(r.net_collection) + num(r.cash_deposit);
+    cell[k] = (cell[k] || 0) + num(r.gross_income);
     exp[d] = (exp[d] || 0) + num(r.total_expenses);
     nc[d] = (nc[d] || 0) + num(r.net_collection);
+    cashDeposit[d] = (cashDeposit[d] || 0) + num(r.cash_deposit);
   });
 
   const first = 4, last = first + days.length - 1;
@@ -986,10 +912,10 @@ function buildMonthlyDailySheet(wb, approved, from, to) {
     const e = exp[d] || 0;
     row.getCell(cTotal).value = { formula: `SUM(B${rn}:${L(nb + 1)}${rn})`, result: tot };
     row.getCell(cExp).value = e || null;
-    // NET COLLECTION = the app's real net collection of the day (matches the Summary sheet).
+    // Keep collection figures aligned with the approved remittance totals.
     const n = nc[d] || 0;
     row.getCell(cNet).value = n;
-    row.getCell(cLeft).value = { formula: `SUM(${L(cNet)}${rn}-${L(cNse)}${rn})`, result: n };
+    row.getCell(cLeft).value = n + (cashDeposit[d] || 0);
     for (let c = 1; c <= cLeft; c++) {
       const x = row.getCell(c);
       x.border = BOX;
@@ -1019,9 +945,9 @@ function buildMonthlyDailySheet(wb, approved, from, to) {
   }
 }
 
-// ── Attendance sheet: drivers then conductors, "/" on every day they have an
-// approved remittance. Employee numbers are EMP-### from the user id.
-function buildAttendanceSheet(wb, approved, from, to) {
+// ── Attendance sheet: drivers then conductors, "/" on completed trip days and
+// "X" on other days in the selected range. Employee numbers are EMP-### from the user id.
+function buildAttendanceSheet(wb, trips, from, to) {
   const ws = wb.addWorksheet("Attendance");
   const days = dayList(from, to);
   ws.getColumn(1).width = 13.9;
@@ -1034,12 +960,19 @@ function buildAttendanceSheet(wb, approved, from, to) {
     ws.getColumn(4 + i).width = 3.7;
   });
   const emp = { driver: new Map(), conductor: new Map() };
-  approved.forEach((r) => {
+  const manilaDayKey = (value) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(value));
+  trips.forEach((trip) => {
     ["driver", "conductor"].forEach((role) => {
-      const u = r[role];
+      const u = trip[role];
       if (!u) return;
       const e = emp[role].get(u.id) || { u, days: new Set() };
-      e.days.add(dateKey(r.date));
+      e.days.add(manilaDayKey(trip.departure_time));
       emp[role].set(u.id, e);
     });
   });
@@ -1057,7 +990,7 @@ function buildAttendanceSheet(wb, approved, from, to) {
         row.getCell(3).value = e.u.last_name;
         days.forEach((d, i) => {
           const c = row.getCell(4 + i);
-          if (e.days.has(d)) c.value = "/";
+          c.value = e.days.has(d) ? "/" : "X";
           c.border = BOX;
           c.alignment = { horizontal: "center" };
         });
@@ -1092,92 +1025,43 @@ router.get("/reports/remittances", async (req, res) => {
     const range = readRange(req, res);
     if (!range) return;
     const ExcelJS = require("exceljs");
-    const { rows, approved, summary } = await loadReport(range.from, range.to);
-
-    const PESO = '"₱"#,##0.00';
-    const WHOLE = '"₱"#,##0.00'; // commissions are whole pesos, shown with .00
-    const HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E5AAA" } };
-    // Style only the cells that hold a heading (not the whole row).
-    const styleHeader = (row, colCount) => {
-      for (let i = 1; i <= colCount; i++) {
-        const c = row.getCell(i);
-        c.font = { bold: true, color: { argb: "FFFFFFFF" } };
-        c.fill = HEADER_FILL;
-        c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      }
-      row.height = 28;
-    };
+    const { rows, approved } = await loadReport(range.from, range.to);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "JAPS";
     wb.created = new Date();
     const isDaily = range.from === range.to;
-    if (isDaily) buildDailySheet(wb, rows, range.from);
-
-    // ── Sheet 1: Summary ──────────────────────────────────────────────────
-    const ws1 = wb.addWorksheet("Summary");
-    ws1.columns = [{ width: 44 }, { width: 24 }];
-    const GREY = { argb: "FF6B7280" };
-    const thin = { style: "thin", color: { argb: "FFD1D5DB" } };
-
-    ws1.mergeCells("A1:B1");
-    ws1.getCell("A1").value = "JAPS Remittance Report";
-    ws1.getCell("A1").font = { bold: true, size: 16 };
-    ws1.mergeCells("A2:B2");
-    ws1.getCell("A2").value =
-      range.from === range.to ? `Date: ${range.from}` : `Period: ${range.from} to ${range.to}`;
-    ws1.getCell("A2").font = { italic: true, color: GREY };
-    ws1.addRow([]);
-
-    styleHeader(ws1.addRow(["Particulars", "Total"]), 2);
-
-    const section = (title) => {
-      const r = ws1.addRow([title]);
-      ws1.mergeCells(r.number, 1, r.number, 2);
-      r.getCell(1).font = { bold: true, color: { argb: "FF1E5AAA" } };
-      r.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8F0FB" } };
-      r.getCell(1).alignment = { vertical: "middle" };
-      r.height = 22;
-    };
-    const line = (label, value, fmt, opts = {}) => {
-      const r = ws1.addRow([label, value]);
-      r.getCell(1).alignment = { indent: 1 };
-      r.getCell(2).numFmt = fmt;
-      r.getCell(2).alignment = { horizontal: "right" };
-      r.eachCell((c) => (c.border = { bottom: thin }));
-      if (opts.bold) {
-        r.font = { bold: true };
-        r.eachCell((c) => {
-          c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
-          c.border = { top: { style: "thin" }, bottom: { style: "double" } };
-        });
-      }
-    };
-
-    section("Remittances");
-    line("Approved remittances", summary.remittances, "0");
-
-    section("Income");
-    line("Gross income", summary.gross_income, PESO);
-    line("Less: total expenses", summary.total_expenses, PESO);
-    line("Net gross", summary.net_gross, PESO);
-
-    section("Collection");
-    line("Net collection", summary.net_collection, PESO);
-    line("Cash deposit", summary.cash_deposit, PESO);
-    line("Total revenue", summary.total_revenue, PESO, { bold: true });
-
-    section("Cash received");
-    line("Cash remitted (received by audit teller)", summary.cash_received, PESO);
-    line(
-      "Difference (cash remitted − total revenue)",
-      summary.cash_received - summary.total_revenue,
-      PESO,
-    );
+    if (isDaily) {
+      const activeBuses = await BusModel.findAll({
+        where: { status: "active" },
+        include: [
+          { model: User, as: "assignedDriver", attributes: ["id", "first_name", "last_name"] },
+          { model: User, as: "assignedConductor", attributes: ["id", "first_name", "last_name"] },
+        ],
+        order: [["bus_number", "ASC"]],
+      });
+      buildDailySheet(wb, activeBuses, rows);
+    }
 
     if (!isDaily) {
       buildMonthlyDailySheet(wb, approved, range.from, range.to);
-      buildAttendanceSheet(wb, approved, range.from, range.to);
+      const attendanceTrips = await Trip.findAll({
+        attributes: ["departure_time"],
+        where: {
+          status: "completed",
+          departure_time: {
+            [Op.between]: [
+              new Date(`${range.from}T00:00:00.000+08:00`),
+              new Date(`${range.to}T23:59:59.999+08:00`),
+            ],
+          },
+        },
+        include: [
+          { model: User, as: "driver", attributes: ["id", "first_name", "last_name"] },
+          { model: User, as: "conductor", attributes: ["id", "first_name", "last_name"] },
+        ],
+      });
+      buildAttendanceSheet(wb, attendanceTrips, range.from, range.to);
     }
 
     const fileName = isDaily

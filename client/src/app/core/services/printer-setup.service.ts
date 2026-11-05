@@ -147,7 +147,7 @@ export class PrinterSetupService {
       new Uint8Array([ESC, 0x40]), // initialize
       new Uint8Array([ESC, 0x61, 0x01]), // center align
       this.buildRasterImageCommand(bitmap),
-      new Uint8Array([ESC, 0x64, 0x03]), // feed 3 lines so the tear-off clears the text
+      new Uint8Array([ESC, 0x64, 0x01]), // feed one line so the tear-off clears the text
     ]);
 
     const chunkSize = 180;
@@ -174,8 +174,8 @@ export class PrinterSetupService {
     const FONT = 'Poppins, Arial, sans-serif';
     try {
       await Promise.all([
-        document.fonts.load(`500 20px ${FONT}`),
-        document.fonts.load(`600 24px ${FONT}`),
+        document.fonts.load(`400 20px ${FONT}`),
+        document.fonts.load(`700 24px ${FONT}`),
       ]);
     } catch {
       /* fall back to the default font */
@@ -192,7 +192,7 @@ export class PrinterSetupService {
         left: string,
         right: string | null,
         size: number,
-        weight = 500,
+        weight = 400,
         align: 'lr' | 'center' = 'lr',
       ) => {
         const lineH = Math.round(size * 1.45);
@@ -232,12 +232,12 @@ export class PrinterSetupService {
         if (ctx) ctx.drawImage(logo, (W - logoW) / 2, y, logoW, logoH);
         y += logoH + 4;
       } else {
-        text('JAPS', null, 32, 700, 'center');
+        text('JAPS', null, 32, 400, 'center');
       }
-      text(t.dateText, null, 18, 500, 'center');
+      text(t.dateText, null, 18, 400, 'center');
       rule(true);
 
-      text('TICKET NO:', `#${t.ticketNumber}`, 24, 600);
+      text('TICKET NO:', `#${t.ticketNumber}`, 24);
       text('BUS NO:', t.busNumber, 20);
       text('PLATE NO:', t.plateNumber, 20);
       text('FROM:', t.from, 20);
@@ -247,12 +247,11 @@ export class PrinterSetupService {
       for (const line of t.lines) text(`${line.label} ×${line.quantity}`, line.amount, 20);
       text('PASSENGERS:', String(t.passengerCount), 20);
       rule(false);
-      text('TOTAL AMOUNT:', t.total, 24, 600);
+      text('TOTAL AMOUNT:', t.total, 24, 700);
       rule(true);
 
-      text('Thank you for riding with us!', null, 18, 500, 'center');
-      text('PLEASE KEEP THIS TICKET', null, 14, 500, 'center');
-      y += 8;
+      text('Thank you for riding with us!', null, 18, 400, 'center');
+      text('PLEASE KEEP THIS TICKET', null, 14, 400, 'center');
       return y;
     };
 

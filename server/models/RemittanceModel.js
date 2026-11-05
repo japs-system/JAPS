@@ -8,6 +8,7 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         primaryKey: true,
         allowNull: false,
+        autoIncrement: true,
       },
       bus_id: {
         type: DataTypes.INTEGER,

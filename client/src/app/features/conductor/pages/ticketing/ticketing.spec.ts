@@ -9,10 +9,10 @@ describe('TicketingPage', () => {
   let component: TicketingPage;
   let fixture: ComponentFixture<TicketingPage>;
   let httpMock: HttpTestingController;
-  let printTicketImage: ReturnType<typeof vi.fn>;
+  let printReceipt: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    printTicketImage = vi.fn().mockResolvedValue(undefined);
+    printReceipt = vi.fn().mockResolvedValue(undefined);
 
     await TestBed.configureTestingModule({
       imports: [TicketingPage, HttpClientTestingModule],
@@ -21,7 +21,7 @@ describe('TicketingPage', () => {
         {
           provide: PrinterSetupService,
           useValue: {
-            printTicketImage,
+            printReceipt,
           },
         },
       ],
@@ -48,7 +48,7 @@ describe('TicketingPage', () => {
 
   afterEach(() => httpMock.verify());
 
-  it('prints an image of the rendered receipt after a successful ticket submission', async () => {
+  it('prints the receipt after a successful ticket submission', async () => {
     component.selectedTripId.set(1);
     component.trips.set([
       {
@@ -106,13 +106,23 @@ describe('TicketingPage', () => {
     fixture.detectChanges();
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-    expect(printTicketImage).toHaveBeenCalledTimes(1);
-    const receiptEl = printTicketImage.mock.calls[0][0] as HTMLElement;
-    expect(receiptEl.textContent).toContain('ABC-123');
-    expect(receiptEl.textContent).toContain('Manila');
-    expect(receiptEl.textContent).toContain('Student ×1');
-    expect(receiptEl.textContent).toContain('Senior Citizen ×1');
-    expect(receiptEl.textContent).toMatch(/PASSENGERS:\s*3/);
+    expect(printReceipt).toHaveBeenCalledTimes(1);
+    expect(printReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticketNumber: 7,
+        busNumber: 'BUS-01',
+        plateNumber: 'ABC-123',
+        from: 'Manila',
+        to: 'Baguio',
+        passengerCount: 3,
+        total: '₱26.00',
+        lines: [
+          { label: 'Regular', quantity: 1, amount: '₱10.00' },
+          { label: 'Student', quantity: 1, amount: '₱8.00' },
+          { label: 'Senior Citizen', quantity: 1, amount: '₱8.00' },
+        ],
+      }),
+    );
 
     // printTicketSubmit()'s success handler also refreshes trips & passenger counts.
     httpMock.expectOne(`${environment.apiUrl}/api/conductor/trips`).flush([]);

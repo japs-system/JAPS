@@ -101,13 +101,11 @@
 
       <p class="mt-4 text-xs text-gray-500">
         @if (from() === to()) {
-          Single day: the Excel file is a <strong>Teller's Report</strong> (one row per bus, gross
-          income, every expense column, commissions, net collection, total revenue and status) plus
-          a <strong>Summary</strong> sheet.
+          Single day: the Excel file lists every active bus, its assigned driver and conductor,
+          collection (net gross), selected expense totals, and the audit teller's received remittance.
         } @else {
-          The Excel file has three sheets: <strong>Summary</strong>, <strong>Remittances</strong>
-          (every remittance in the range with its status) and <strong>Daily</strong> (approved
-          totals per day).
+          The Excel file has two sheets: <strong>Daily</strong> (approved totals per day) and
+          <strong>Attendance</strong> (completed-trip attendance).
         }
       </p>
     </div>

@@ -81,14 +81,6 @@ interface ManualTripEntry {
   arrival: string; // datetime-local, optional
 }
 
-/** An unremitted entry from the conductor's expense log. */
-interface LoggedExpense {
-  id: number;
-  trip_id: number | null;
-  expense_type: string;
-  amount: string | number;
-}
-
 const MANUAL_CATEGORIES = ['regular', 'student', 'senior_citizen'];
 
 // Remittance form control for each expense type.
@@ -493,20 +485,15 @@ export class ConductorRemittancesPage implements OnInit {
     this.loadingTrips.set(true);
     this.selectedTripIds.set(new Set());
     this.manualEntries.set({});
-    this.loadLoggedExpenses();
     this.http
       .get<Trip[]>(`${this.API}/trips`, {
-        params: { date: this.selectedDate(), busId: bus.id.toString(), includeOpen: '1' },
+        params: { date: this.selectedDate(), busId: bus.id.toString() },
         withCredentials: true,
       })
       .subscribe({
         next: (data) => {
-          // Ticketed trips can only be remitted once completed; trips without tickets can
-          // be remitted from any state by encoding their results manually.
           this.allTrips.set(
-            data.filter(
-              (t) => !t.remittance_id && (t.status === 'completed' || this.isManual(t)),
-            ),
+            data.filter((t) => !t.remittance_id && t.status === 'completed'),
           );
           this.loadingTrips.set(false);
         },
@@ -620,18 +607,6 @@ export class ConductorRemittancesPage implements OnInit {
   scheduledTimeLocal(t: Trip): string {
     return toDateTimeLocal(t.departure_time);
   }
-
-  // ── Expense log pre-fill ──
-  private loadLoggedExpenses(): void {
-    const bus = this.selectedBus();
-    if (!bus) return;
-    this.http
-      .get<LoggedExpense[]>(`${this.API}/expenses`, {
-        params: { date: this.selectedDate(), busId: bus.id.toString(), unremitted: '1' },
-        withCredentials: true,
-      })
-  }
-
 
   isSelected(id: number): boolean {
     return this.selectedTripIds().has(id);

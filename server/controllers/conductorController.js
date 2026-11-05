@@ -123,15 +123,12 @@ const notifyReviewersOfSubmission = (remittance, isResubmission) =>
   );
 
 // GET /api/conductor/trips
-// Returns completed unremitted trips for a bus on a date (for remittance submission).
-// With includeOpen=1 it also returns that day's scheduled/ongoing trips, so a conductor
-// who didn't use ticketing can remit them with manually encoded counts. Each trip then
-// carries `ticket_count` so the client knows which ones need manual entry.
+// Returns completed, unremitted trips for a bus on a date (for remittance submission).
+// Each trip carries `ticket_count` so the client knows which ones need manual entry.
 const getAssignedTrips = async (req, res) => {
   try {
     const conductorId = req.user.id;
-    const { date, busId, includeOpen } = req.query;
-    const withOpen = includeOpen === "1" || includeOpen === "true";
+    const { date, busId } = req.query;
 
     // If date + busId provided, return unremitted trips for that bus/date
     if (date && busId) {
@@ -149,7 +146,7 @@ const getAssignedTrips = async (req, res) => {
         where: {
           bus_id: busId,
           conductor_id: conductorId,
-          status: withOpen ? ["scheduled", "ongoing", "completed"] : "completed",
+          status: "completed",
           remittance_id: null,
           departure_time: {
             [Op.gte]: new Date(date + "T00:00:00"),
