@@ -1,4 +1,3 @@
-
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -315,6 +314,7 @@ export class Schedules implements OnInit {
       bus_id: bus.id,
       driver_id: driverId,
       conductor_id: conductorId,
+      date: this.scheduleDate(),
       trips: this.tripRows().map((r) => ({
         route_id: r.route_id,
         departure_time: r.departure_time,

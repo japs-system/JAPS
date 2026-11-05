@@ -363,20 +363,23 @@ const createTrip = async (req, res) => {
 
 // POST /api/buses/trips/bulk — create multiple trips, trip numbers auto-assigned
 const createTripsBulk = async (req, res) => {
-  const { bus_id, driver_id, conductor_id, date, trips } = req.body;
+  const { bus_id, driver_id, conductor_id, trips } = req.body;
   // trips = [{ route_id, departure_time }]
   if (
     !bus_id ||
     !driver_id ||
     !conductor_id ||
-    !date ||
     !Array.isArray(trips) ||
     trips.length === 0
   ) {
     return res.status(400).json({
-      message:
-        "bus_id, driver_id, conductor_id, date, and trips[] are required.",
+      message: "bus_id, driver_id, conductor_id and trips[] are required.",
     });
+  }
+  // The date is optional: it defaults to the day of the first departure (YYYY-MM-DD).
+  const date = req.body.date || String(trips[0].departure_time || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ message: "A valid departure date and time is required." });
   }
 
   // Schedule conflicts: same bus, driver or conductor at the same date and time,
