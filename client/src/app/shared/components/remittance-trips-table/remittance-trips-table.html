@@ -66,10 +66,12 @@
               } @else if (trip.Tickets.length === 0) {
                 <p class="text-xs text-gray-400 italic">No tickets recorded for this trip.</p>
               } @else {
+                <!-- About 5 tickets are visible at a time; scroll for the rest -->
+                <div class="max-h-[180px] overflow-auto rounded-lg border border-gray-200 bg-white">
                 <table class="w-full text-xs whitespace-nowrap">
-                  <thead>
-                    <tr class="text-gray-400">
-                      <th class="text-left font-semibold py-1.5 pr-3">Ticket #</th>
+                  <thead class="sticky top-0 z-10 bg-gray-100">
+                    <tr class="text-gray-500">
+                      <th class="text-left font-semibold py-1.5 px-3">Ticket #</th>
                       <th class="text-left font-semibold py-1.5 pr-3">Passengers</th>
                       <th class="text-left font-semibold py-1.5 pr-3">From</th>
                       <th class="text-left font-semibold py-1.5 pr-3">To</th>
@@ -81,7 +83,7 @@
                   <tbody class="divide-y divide-gray-200">
                     @for (ticket of trip.Tickets; track ticket.id) {
                       <tr class="text-gray-700">
-                        <td class="py-1.5 pr-3 font-medium">{{ ticket.ticket_number }}</td>
+                        <td class="py-1.5 px-3 font-medium">{{ ticket.ticket_number }}</td>
                         <td class="py-1.5 pr-3">{{ passengerSummary(ticket) }}</td>
                         <td class="py-1.5 pr-3">{{ ticket.boarding_point ?? '—' }}</td>
                         <td class="py-1.5 pr-3">{{ ticket.dropping_point ?? '—' }}</td>
@@ -96,6 +98,7 @@
                     }
                   </tbody>
                 </table>
+                </div>
               }
             </td>
           </tr>
