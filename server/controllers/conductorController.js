@@ -511,7 +511,7 @@ const printTicket = async (req, res) => {
     const baseFare =
       distance_km <= baseDistanceKm
         ? minFare
-        : minFare + (distance_km - baseDistanceKm) * ratePerKm;
+        : distance_km * ratePerKm;
 
     const passengers = group.map(({ category, quantity }) => {
       const discountPercent = getDiscountPercent(category, fareSettings);

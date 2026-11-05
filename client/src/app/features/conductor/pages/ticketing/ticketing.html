@@ -324,7 +324,7 @@
       >
         <!-- Store Header -->
         <div class="text-center space-y-1">
-          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-8 mx-auto" />
+          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-5 w-auto mx-auto object-contain" />
           <p class="text-lg"> {{ lastPrintedTicket()?.date | date: 'medium' }}</p>
         </div>
 
@@ -382,10 +382,7 @@
           <p>Thank you for riding with us!</p>
           <p class=" text-sm uppercase mt-1">Please keep this ticket</p>
         </div>
-
-        <!-- Trailing blank space — gives room to cut the paper without clipping
-             the text above it. -->
-        <div class="h-8"></div>
+        <div class="h-2"></div>
       </div>
 
       <!-- Action Footer -->
