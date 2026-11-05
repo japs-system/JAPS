@@ -217,7 +217,7 @@
       <!-- Trip Status Panel -->
       <div class="bg-[#0F2942] text-white rounded-2xl p-5 shadow-md">
         <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-          Transit Information
+          Trip Information
         </h4>
         <div class="space-y-3.5 text-sm">
           <div>
@@ -324,7 +324,7 @@
       >
         <!-- Store Header -->
         <div class="text-center space-y-1">
-          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-5 w-auto mx-auto object-contain" />
+          <img src="assets/images/JAPS (black).png" alt="JAPS" class="h-4 w-auto mx-auto" />
           <p class="text-lg"> {{ lastPrintedTicket()?.date | date: 'medium' }}</p>
         </div>
 
@@ -332,7 +332,7 @@
 
         <!-- Ticket Number and Metadata -->
         <div class="space-y-1">
-          <div class="flex justify-between gap-2 text-2xl">
+          <div class="flex justify-between gap-2 text-2xl font-normal">
             <span>TICKET NO:</span>
             <span>#{{ lastPrintedTicket()?.ticketNumber }}</span>
           </div>
@@ -382,7 +382,7 @@
           <p>Thank you for riding with us!</p>
           <p class=" text-sm uppercase mt-1">Please keep this ticket</p>
         </div>
-        <div class="h-2"></div>
+        <div class="h-1"></div>
       </div>
 
       <!-- Action Footer -->
