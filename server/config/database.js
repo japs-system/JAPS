@@ -11,6 +11,8 @@ const sequelize = new Sequelize(
 		port: process.env.DB_PORT || 5432,
 		dialect: "postgres",
 		logging: false,
+		// Philippine time: makes ::date / EXTRACT on timestamps use Manila days and hours.
+		timezone: "+08:00",
 		dialectOptions: useSsl
 			? {
 					ssl: {

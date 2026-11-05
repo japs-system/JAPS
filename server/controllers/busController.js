@@ -301,6 +301,37 @@ const notifyManagementOfSchedule = async ({ busLabel, date, driver, conductor, t
   }
 };
 
+// Returns a message when the bus, the driver or the conductor already has a trip
+// (not cancelled) at the same date and time, otherwise null.
+const findScheduleConflict = async ({ bus_id, driver_id, conductor_id, departure_time }) => {
+  const when = new Date(departure_time);
+  if (Number.isNaN(when.getTime())) return null;
+  const slotStart = new Date(when);
+  slotStart.setSeconds(0, 0);
+  const slotEnd = new Date(slotStart.getTime() + 60 * 1000);
+
+  const who = [{ bus_id }];
+  if (driver_id) who.push({ driver_id });
+  if (conductor_id) who.push({ conductor_id });
+
+  const clash = await Trip.findOne({
+    where: {
+      status: { [Op.ne]: "cancelled" },
+      departure_time: { [Op.gte]: slotStart, [Op.lt]: slotEnd },
+      [Op.or]: who,
+    },
+  });
+  if (!clash) return null;
+
+  const what =
+    String(clash.bus_id) === String(bus_id)
+      ? "This bus"
+      : driver_id && String(clash.driver_id) === String(driver_id)
+        ? "This driver"
+        : "This conductor";
+  return `${what} already has a trip (#${clash.trip_number}) on ${formatDate(slotStart)} at ${formatTime(slotStart)}. Please choose a different departure time.`;
+};
+
 // POST /api/buses/trips
 const createTrip = async (req, res) => {
   const {
@@ -311,6 +342,10 @@ const createTrip = async (req, res) => {
     trip_number,
     departure_time,
   } = req.body;
+
+  const conflict = await findScheduleConflict({ bus_id, driver_id, conductor_id, departure_time });
+  if (conflict) return res.status(409).json({ message: conflict });
+
   const trip = await Trip.create({
     bus_id,
     route_id,
@@ -342,6 +377,28 @@ const createTripsBulk = async (req, res) => {
       message:
         "bus_id, driver_id, conductor_id, date, and trips[] are required.",
     });
+  }
+
+  // Schedule conflicts: same bus, driver or conductor at the same date and time,
+  // either inside this batch or already scheduled.
+  const seenSlots = new Set();
+  for (const t of trips) {
+    const slot = new Date(t.departure_time);
+    slot.setSeconds(0, 0);
+    const key = slot.getTime();
+    if (seenSlots.has(key)) {
+      return res.status(409).json({
+        message: `Two trips in this batch have the same departure (${formatDate(slot)} at ${formatTime(slot)}). Please choose different times.`,
+      });
+    }
+    seenSlots.add(key);
+    const conflict = await findScheduleConflict({
+      bus_id,
+      driver_id,
+      conductor_id,
+      departure_time: t.departure_time,
+    });
+    if (conflict) return res.status(409).json({ message: conflict });
   }
 
   // Find the highest existing trip_number for this bus on this date
