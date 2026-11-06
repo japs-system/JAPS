@@ -69,11 +69,6 @@ module.exports = (sequelize) => {
         type: DataTypes.ENUM("scheduled", "ongoing", "completed", "cancelled"),
         defaultValue: "scheduled",
       },
-      hidden_from_schedule: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
     },
     {
       tableName: "trips",

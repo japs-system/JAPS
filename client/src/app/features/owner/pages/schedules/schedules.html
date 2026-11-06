@@ -255,8 +255,8 @@
                 <button
                   (click)="confirmDelete(trip)"
                   class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                  title="Remove from schedule"
-                  aria-label="Remove trip from schedule"
+                  title="Delete"
+                  aria-label="Delete trip"
                   type="button"
                 >
                   <i class="pi pi-trash text-sm"></i>
@@ -484,17 +484,19 @@
       <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
         <i class="pi pi-trash text-red-500 text-2xl"></i>
       </div>
-      <h3 class="text-lg font-semibold text-gray-900 mb-2">
-        {{ deletingTrip()?.status === 'scheduled' ? 'Cancel Scheduled Trip' : 'Remove from Schedule' }}
-      </h3>
-      <p class="text-gray-500 text-sm mb-6">
-        @if (deletingTrip()?.status === 'scheduled') {
-          Cancel trip <strong>#{{ deletingTrip()?.trip_number }}</strong>? The trip and any related records will be preserved.
-        } @else {
-          Hide trip <strong>#{{ deletingTrip()?.trip_number }}</strong> from this schedule list?
-          Its status and all linked history will be preserved.
-        }
-      </p>
+      @if (deletingTrip()?.status === 'scheduled') {
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Cancel Scheduled Trip</h3>
+        <p class="text-gray-500 text-sm mb-6">
+          Cancel trip <strong>#{{ deletingTrip()?.trip_number }}</strong>? The trip record and its
+          history will be preserved.
+        </p>
+      } @else {
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Permanently Delete Trip</h3>
+        <p class="text-gray-500 text-sm mb-6">
+          Permanently delete trip <strong>#{{ deletingTrip()?.trip_number }}</strong> and its tickets
+          and passenger counts? This cannot be undone. Trips linked to a remittance cannot be deleted.
+        </p>
+      }
       <div class="flex gap-3">
         <button
           (click)="cancelDelete()"
@@ -506,7 +508,7 @@
           (click)="deleteTrip()"
           class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer"
         >
-          {{ deletingTrip()?.status === 'scheduled' ? 'Cancel Trip' : 'Remove from Schedule' }}
+          {{ deletingTrip()?.status === 'scheduled' ? 'Cancel Trip' : 'Delete Trip' }}
         </button>
       </div>
     </div>

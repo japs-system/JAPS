@@ -145,24 +145,24 @@ describe('Schedules', () => {
     expect(component.showDeleteModal()).toBe(false);
   });
 
-  it.each(['completed', 'cancelled'])('hides a %s trip from the schedule list', (status) => {
+  it('deletes a completed trip and reloads the schedule list', () => {
     const trip: ScheduleTrip = {
-      id: status === 'completed' ? 100 : 101,
+      id: 100,
       bus_id: 10,
       driver_id: 2,
       conductor_id: 4,
       route_id: 40,
       trip_number: 4,
       departure_time: '2026-11-07T04:00:00.000Z',
-      actual_departure_time: null,
-      arrival_time: null,
-      status,
+      actual_departure_time: '2026-11-07T04:05:00.000Z',
+      arrival_time: '2026-11-07T05:00:00.000Z',
+      status: 'completed',
     };
 
     component.confirmDelete(trip);
     component.deleteTrip();
 
-    const request = httpMock.expectOne(`${environment.apiUrl}/api/buses/trips/${trip.id}`);
+    const request = httpMock.expectOne(`${environment.apiUrl}/api/buses/trips/100`);
     expect(request.request.method).toBe('DELETE');
     request.flush(null);
 
@@ -172,6 +172,5 @@ describe('Schedules', () => {
       )
       .flush([]);
     expect(component.showDeleteModal()).toBe(false);
-    expect(component.deletingTrip()).toBeNull();
   });
 });

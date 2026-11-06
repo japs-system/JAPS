@@ -1,5 +1,14 @@
 const { Op } = require("sequelize");
-const { BusInfo, User, Trip, Route, BusCrewHistory } = require("../models");
+const {
+  BusInfo,
+  User,
+  Trip,
+  Route,
+  BusCrewHistory,
+  PassengerCount,
+  Ticket,
+  sequelize,
+} = require("../models");
 const {
   fullName,
   sendTripScheduledEmail,
@@ -187,10 +196,7 @@ const getTrips = async (req, res) => {
   const endExclusive = manilaDayBounds(toKey).endExclusive;
 
   const trips = await Trip.findAll({
-    where: {
-      hidden_from_schedule: false,
-      departure_time: { [Op.gte]: start, [Op.lt]: endExclusive },
-    },
+    where: { departure_time: { [Op.gte]: start, [Op.lt]: endExclusive } },
     include: [
       { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
       { model: Route, attributes: ["id", "origin", "destination"] },
@@ -616,34 +622,61 @@ const updateTrip = async (req, res) => {
 
 // DELETE /api/buses/trips/:id
 const deleteTrip = async (req, res) => {
-  const trip = await Trip.findByPk(req.params.id);
-  if (!trip) return res.status(404).json({ message: "Trip not found." });
-  if (trip.status === "completed" || trip.status === "cancelled") {
-    await trip.update({ hidden_from_schedule: true });
-    return res.status(204).send();
-  }
-  if (trip.status !== "scheduled") {
-    return res.status(409).json({ message: "Only scheduled, completed, or cancelled trips can be removed from the schedule." });
-  }
-
-  const { conductor_id, driver_id, trip_number, departure_time } = trip;
-  await trip.update({ status: "cancelled" });
-
-  for (const [userId, link] of [
-    [conductor_id, "/conductor/trips"],
-    [driver_id, "/driver/dashboard"],
-  ]) {
-    if (!userId) continue;
-    await createNotification({
-      userId,
-      type: "schedule_cancelled",
-      title: "Schedule cancelled",
-      message: `Trip #${trip_number} on ${formatDate(departure_time)} at ${formatTime(departure_time)} was cancelled.`,
-      link,
+  const transaction = await sequelize.transaction();
+  try {
+    const trip = await Trip.findByPk(req.params.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
     });
-  }
+    if (!trip) {
+      await transaction.rollback();
+      return res.status(404).json({ message: "Trip not found." });
+    }
 
-  return res.status(204).send();
+    if (trip.status === "scheduled") {
+      const { conductor_id, driver_id, trip_number, departure_time } = trip;
+      await trip.update({ status: "cancelled" }, { transaction });
+      await transaction.commit();
+
+      for (const [userId, link] of [
+        [conductor_id, "/conductor/trips"],
+        [driver_id, "/driver/dashboard"],
+      ]) {
+        if (!userId) continue;
+        await createNotification({
+          userId,
+          type: "schedule_cancelled",
+          title: "Schedule cancelled",
+          message: `Trip #${trip_number} on ${formatDate(departure_time)} at ${formatTime(departure_time)} was cancelled.`,
+          link,
+        });
+      }
+      return res.status(204).send();
+    }
+
+    if (trip.status !== "completed" && trip.status !== "cancelled") {
+      await transaction.rollback();
+      return res.status(409).json({
+        message: "Only scheduled, completed, or cancelled trips can be deleted.",
+      });
+    }
+    if (trip.remittance_id !== null) {
+      await transaction.rollback();
+      return res.status(409).json({
+        message: "This trip is linked to a remittance and cannot be deleted.",
+      });
+    }
+
+    await Ticket.destroy({ where: { trip_id: trip.id }, transaction });
+    await PassengerCount.destroy({ where: { trip_id: trip.id }, transaction });
+    await trip.destroy({ transaction });
+    await transaction.commit();
+    return res.status(204).send();
+  } catch (error) {
+    if (!transaction.finished) await transaction.rollback();
+    console.error("Error deleting trip:", error);
+    return res.status(500).json({ message: "Could not delete trip." });
+  }
 };
 
 // GET /api/buses/routes

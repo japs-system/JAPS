@@ -424,12 +424,8 @@ export class Schedules implements OnInit {
     if (!trip) return;
     this.http.delete(`${this.BUSES_API}/trips/${trip.id}`, { withCredentials: true }).subscribe({
       next: () => {
-        this.alertService.success(
-          trip.status === 'scheduled' ? 'Cancelled' : 'Removed',
-          trip.status === 'scheduled' ? 'Trip cancelled.' : 'Trip hidden from the schedule list.',
-        );
+        this.alertService.success('Deleted', 'Trip removed.');
         this.showDeleteModal.set(false);
-        this.deletingTrip.set(null);
         this.loadTrips();
       },
       error: (err) =>
