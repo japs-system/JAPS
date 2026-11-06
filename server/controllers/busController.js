@@ -187,7 +187,10 @@ const getTrips = async (req, res) => {
   const endExclusive = manilaDayBounds(toKey).endExclusive;
 
   const trips = await Trip.findAll({
-    where: { departure_time: { [Op.gte]: start, [Op.lt]: endExclusive } },
+    where: {
+      hidden_from_schedule: false,
+      departure_time: { [Op.gte]: start, [Op.lt]: endExclusive },
+    },
     include: [
       { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
       { model: Route, attributes: ["id", "origin", "destination"] },
@@ -615,8 +618,12 @@ const updateTrip = async (req, res) => {
 const deleteTrip = async (req, res) => {
   const trip = await Trip.findByPk(req.params.id);
   if (!trip) return res.status(404).json({ message: "Trip not found." });
+  if (trip.status === "completed" || trip.status === "cancelled") {
+    await trip.update({ hidden_from_schedule: true });
+    return res.status(204).send();
+  }
   if (trip.status !== "scheduled") {
-    return res.status(409).json({ message: "Only scheduled trips can be cancelled from the schedule." });
+    return res.status(409).json({ message: "Only scheduled, completed, or cancelled trips can be removed from the schedule." });
   }
 
   const { conductor_id, driver_id, trip_number, departure_time } = trip;

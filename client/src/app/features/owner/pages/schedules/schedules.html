@@ -251,6 +251,16 @@
                     <i class="pi pi-trash text-sm"></i>
                   </button>
                 </div>
+              } @else if (trip.status === 'completed' || trip.status === 'cancelled') {
+                <button
+                  (click)="confirmDelete(trip)"
+                  class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Remove from schedule"
+                  aria-label="Remove trip from schedule"
+                  type="button"
+                >
+                  <i class="pi pi-trash text-sm"></i>
+                </button>
               }
             </td>
           </tr>
@@ -474,10 +484,16 @@
       <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
         <i class="pi pi-trash text-red-500 text-2xl"></i>
       </div>
-      <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Scheduled Trip</h3>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">
+        {{ deletingTrip()?.status === 'scheduled' ? 'Cancel Scheduled Trip' : 'Remove from Schedule' }}
+      </h3>
       <p class="text-gray-500 text-sm mb-6">
-        Remove trip <strong>#{{ deletingTrip()?.trip_number }}</strong> from the active schedule?
-        It will be marked cancelled so its history is preserved.
+        @if (deletingTrip()?.status === 'scheduled') {
+          Cancel trip <strong>#{{ deletingTrip()?.trip_number }}</strong>? The trip and any related records will be preserved.
+        } @else {
+          Hide trip <strong>#{{ deletingTrip()?.trip_number }}</strong> from this schedule list?
+          Its status and all linked history will be preserved.
+        }
       </p>
       <div class="flex gap-3">
         <button
@@ -490,7 +506,7 @@
           (click)="deleteTrip()"
           class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer"
         >
-          Delete Schedule
+          {{ deletingTrip()?.status === 'scheduled' ? 'Cancel Trip' : 'Remove from Schedule' }}
         </button>
       </div>
     </div>
