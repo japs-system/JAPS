@@ -34,6 +34,7 @@
 <!-- Filter toolbar -->
 <div class="bg-white rounded-lg shadow-sm px-5 py-3 mb-4 flex flex-wrap items-center gap-3">
   <select
+    [value]="filterBus()"
     (change)="filterBus.set($any($event.target).value)"
     class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
   >
@@ -43,6 +44,7 @@
     }
   </select>
   <select
+    [value]="filterRoute()"
     (change)="filterRoute.set($any($event.target).value)"
     class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
   >
@@ -52,6 +54,7 @@
     }
   </select>
   <select
+    [value]="filterDriver()"
     (change)="filterDriver.set($any($event.target).value)"
     class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
   >
@@ -61,6 +64,7 @@
     }
   </select>
   <select
+    [value]="filterConductor()"
     (change)="filterConductor.set($any($event.target).value)"
     class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
   >
@@ -226,13 +230,24 @@
               }
             </td>
             <td class="px-5 py-3">
-              <button
-                (click)="confirmDelete(trip)"
-                class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                title="Remove"
-              >
-                <i class="pi pi-trash text-sm"></i>
-              </button>
+              @if (trip.status === 'scheduled') {
+                <button
+                  (click)="openEdit(trip)"
+                  class="p-1.5 text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                  title="Edit schedule"
+                >
+                  <i class="pi pi-pencil text-sm"></i>
+                </button>
+              }
+              @if (trip.status === 'scheduled') {
+                <button
+                  (click)="confirmDelete(trip)"
+                  class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Cancel scheduled trip"
+                >
+                  <i class="pi pi-trash text-sm"></i>
+                </button>
+              }
             </td>
           </tr>
         }
@@ -254,9 +269,11 @@
         class="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 shrink-0"
       >
         <div>
-          <h3 class="text-lg font-semibold text-gray-900">Schedule Trips</h3>
+          <h3 class="text-lg font-semibold text-gray-900">
+            {{ editingTrip() ? 'Edit Schedule' : 'Schedule Trips' }}
+          </h3>
           <p class="text-xs text-gray-400 mt-0.5">
-            Assign one or more trips to a bus for today
+            {{ editingTrip() ? 'Update the bus, crew, route, or departure time.' : 'Assign one or more trips to a bus.' }}
           </p>
         </div>
         <div class="flex items-center gap-3">
@@ -284,50 +301,46 @@
           >
           <select
             (change)="onModalBusChange($event)"
+            [value]="selectedBus()?.id ?? ''"
             class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white"
           >
             <option value="">— Select Bus —</option>
-            @for (b of buses(); track b.id) {
-              <option [value]="b.id">Bus {{ b.bus_number }} ({{ b.plate_number }})</option>
+            @for (b of activeBuses(); track b.id) {
+              <option [value]="b.id">Bus {{ b.bus_number }}</option>
             }
           </select>
         </div>
 
-        <!-- Bus crew preview -->
+        <!-- Select crew for this schedule -->
         @if (selectedBus()) {
-          <div class="bg-gray-50 rounded-lg px-4 py-3 grid grid-cols-2 gap-3 text-sm">
-            <div class="flex items-center gap-2">
-              <i class="pi pi-user text-gray-400 text-xs"></i>
-              <span class="text-gray-500 text-xs w-20 shrink-0">Driver</span>
-              @if (selectedBus()!.assignedDriver) {
-                <span class="font-medium text-gray-800"
-                  >{{ selectedBus()!.assignedDriver!.first_name }}
-                  {{ selectedBus()!.assignedDriver!.last_name }}</span
-                >
-              } @else {
-                <span class="text-red-500 text-xs">No driver assigned</span>
-              }
-            </div>
-            <div class="flex items-center gap-2">
-              <i class="pi pi-user text-gray-400 text-xs"></i>
-              <span class="text-gray-500 text-xs w-20 shrink-0">Conductor</span>
-              @if (selectedBus()!.assignedConductor) {
-                <span class="font-medium text-gray-800"
-                  >{{ selectedBus()!.assignedConductor!.first_name }}
-                  {{ selectedBus()!.assignedConductor!.last_name }}</span
-                >
-              } @else {
-                <span class="text-red-500 text-xs">No conductor assigned</span>
-              }
-            </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label class="block text-xs font-medium text-gray-600">
+              Driver <span class="text-red-500">*</span>
+              <select
+                [value]="selectedDriverId() ?? ''"
+                (change)="onDriverChange($event)"
+                class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-normal outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white"
+              >
+                <option value="">— Select active driver —</option>
+                @for (driver of drivers(); track driver.id) {
+                  <option [value]="driver.id">{{ driver.first_name }} {{ driver.last_name }}</option>
+                }
+              </select>
+            </label>
+            <label class="block text-xs font-medium text-gray-600">
+              Conductor <span class="text-red-500">*</span>
+              <select
+                [value]="selectedConductorId() ?? ''"
+                (change)="onConductorChange($event)"
+                class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-normal outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white"
+              >
+                <option value="">— Select active conductor —</option>
+                @for (conductor of conductors(); track conductor.id) {
+                  <option [value]="conductor.id">{{ conductor.first_name }} {{ conductor.last_name }}</option>
+                }
+              </select>
+            </label>
           </div>
-
-          @if (!selectedBus()!.driver_id || !selectedBus()!.conductor_id) {
-            <p class="text-xs text-red-500 -mt-2">
-              <i class="pi pi-exclamation-triangle mr-1"></i>
-              Assign a driver and conductor to this bus before scheduling trips.
-            </p>
-          }
         }
 
         <!-- Trip rows -->
@@ -341,13 +354,15 @@
                 Trip numbers auto-assigned
               </span>
             </p>
-            <button
+            @if (!editingTrip()) {
+              <button
               type="button"
               (click)="addRow()"
               class="flex items-center gap-1 text-xs font-semibold text-[#1E5AAA] hover:text-[#174d93] cursor-pointer"
             >
               <i class="pi pi-plus text-[10px]"></i> Add Trip
-            </button>
+              </button>
+            }
           </div>
 
           <!-- Column headers -->
@@ -411,7 +426,11 @@
       <!-- Footer -->
       <div class="flex items-center justify-between px-6 py-4 border-t border-gray-100 shrink-0">
         <span class="text-xs text-gray-400">
-          {{ tripRows().length }} trip{{ tripRows().length !== 1 ? 's' : '' }} to schedule
+          @if (editingTrip()) {
+            Editing trip #{{ editingTrip()!.trip_number }}
+          } @else {
+            {{ tripRows().length }} trip{{ tripRows().length !== 1 ? 's' : '' }} to schedule
+          }
         </span>
         <div class="flex gap-3">
           <button
@@ -432,7 +451,7 @@
             } @else {
               <i class="pi pi-check text-xs"></i>
             }
-            {{ saving() ? 'Saving…' : 'Schedule Trips' }}
+            {{ saving() ? 'Saving…' : editingTrip() ? 'Save Changes' : 'Schedule Trips' }}
           </button>
         </div>
       </div>
@@ -448,10 +467,9 @@
       <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
         <i class="pi pi-trash text-red-500 text-2xl"></i>
       </div>
-      <h3 class="text-lg font-semibold text-gray-900 mb-2">Remove Trip</h3>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Cancel Scheduled Trip</h3>
       <p class="text-gray-500 text-sm mb-6">
-        Remove trip <strong>#{{ deletingTrip()?.trip_number }}</strong> from the schedule? This
-        cannot be undone.
+        Cancel trip <strong>#{{ deletingTrip()?.trip_number }}</strong>? The trip and any related records will be preserved.
       </p>
       <div class="flex gap-3">
         <button
@@ -464,7 +482,7 @@
           (click)="deleteTrip()"
           class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer"
         >
-          Remove
+          Cancel Trip
         </button>
       </div>
     </div>

@@ -10,7 +10,7 @@
 		"start": "node index.js",
 		"dev": "node --watch index.js",
 		"seed:owner": "node scripts/createOwner.js",
-		"test": "node --test services/forecast/*.test.js services/insights/*.test.js"
+		"test": "node --test services/forecast/*.test.js services/insights/*.test.js utils/*.test.js"
 	},
 	"dependencies": {
 		"bcrypt": "^6.0.0",

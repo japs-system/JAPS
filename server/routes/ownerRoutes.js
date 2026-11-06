@@ -469,6 +469,44 @@ router.get("/remittances/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/owner/remittances/:id
+router.delete("/remittances/:id", async (req, res) => {
+  let transaction;
+  try {
+    transaction = await sequelize.transaction();
+    const remittance = await Remittance.findByPk(req.params.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!remittance) {
+      await transaction.rollback();
+      return res.status(404).json({ message: "Remittance not found." });
+    }
+    if (remittance.status === "approved" || remittance.status === "finalized") {
+      await transaction.rollback();
+      return res.status(409).json({
+        message: "Approved or finalized remittances cannot be deleted.",
+      });
+    }
+
+    await Trip.update(
+      { remittance_id: null },
+      { where: { remittance_id: remittance.id }, transaction },
+    );
+    await RemittanceExpense.destroy({
+      where: { remittance_id: remittance.id },
+      transaction,
+    });
+    await remittance.destroy({ transaction });
+    await transaction.commit();
+    return res.status(204).end();
+  } catch (error) {
+    if (transaction && !transaction.finished) await transaction.rollback();
+    console.error("Error deleting remittance:", error);
+    return res.status(500).json({ message: "Internal server error." });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // GET /api/owner/forecast
 // Forecasting & predictive analytics — ML (Random Forest) when enough data is

@@ -12,21 +12,6 @@ export interface Bus {
   plate_number: string;
   capacity: number;
   status: 'active' | 'inactive' | 'under_maintenance';
-  driver_id: number | null;
-  conductor_id: number | null;
-  route_id: number | null;
-  assignedDriver?: { id: number; first_name: string; last_name: string; employee_id: string } | null;
-  assignedConductor?: { id: number; first_name: string; last_name: string; employee_id: string } | null;
-  defaultRoute?: { id: number; origin: string; destination: string } | null;
-}
-
-export interface CrewUser {
-  id: number;
-  employee_id: string;
-  first_name: string;
-  last_name: string;
-  role: string;
-  is_active?: boolean;
 }
 
 type SortField = 'bus_number' | 'plate_number' | 'capacity' | 'status';
@@ -42,12 +27,8 @@ export class Buses implements OnInit {
   private alertService = inject(AlertService);
 
   private readonly API = `${environment.apiUrl}/api/buses`;
-  private readonly USERS_API = `${environment.apiUrl}/api/users`;
-  private readonly ROUTES_API = `${environment.apiUrl}/api/buses/routes`;
-
   allBuses = signal<Bus[]>([]);
   loading = signal(false);
-  routes = signal<{ id: number; origin: string; destination: string }[]>([]);
   search = signal('');
   statusFilter = signal('');
   sortField = signal<SortField>('bus_number');
@@ -118,45 +99,10 @@ export class Buses implements OnInit {
     plate_number: ['', Validators.required],
     capacity: ['', [Validators.required, Validators.min(1)]],
     status: ['active', Validators.required],
-    route_id: [null],
-  });
-
-  showCrewModal = signal(false);
-  assigningBus = signal<Bus | null>(null);
-  drivers = signal<CrewUser[]>([]);
-  conductors = signal<CrewUser[]>([]);
-
-  /** Drivers not assigned to any OTHER bus (the bus being edited keeps its own driver). */
-  availableDrivers = computed(() => {
-    const current = this.assigningBus();
-    const takenByOthers = new Set(
-      this.allBuses()
-        .filter((b) => b.id !== current?.id && b.driver_id != null)
-        .map((b) => b.driver_id as number),
-    );
-    return this.drivers().filter((d) => !takenByOthers.has(d.id));
-  });
-
-  /** Conductors not assigned to any OTHER bus (the bus being edited keeps its own conductor). */
-  availableConductors = computed(() => {
-    const current = this.assigningBus();
-    const takenByOthers = new Set(
-      this.allBuses()
-        .filter((b) => b.id !== current?.id && b.conductor_id != null)
-        .map((b) => b.conductor_id as number),
-    );
-    return this.conductors().filter((c) => !takenByOthers.has(c.id));
-  });
-
-  crewForm: FormGroup = this.fb.group({
-    driver_id: [null],
-    conductor_id: [null],
   });
 
   ngOnInit(): void {
     this.loadBuses();
-    this.loadCrewUsers();
-    this.loadRoutes();
   }
 
   loadBuses(): void {
@@ -164,21 +110,6 @@ export class Buses implements OnInit {
     this.http.get<Bus[]>(this.API, { withCredentials: true }).subscribe({
       next: (data) => { this.allBuses.set(data); this.loading.set(false); },
       error: () => this.loading.set(false),
-    });
-  }
-
-  loadCrewUsers(): void {
-    this.http.get<CrewUser[]>(this.USERS_API, { withCredentials: true }).subscribe({
-      next: (data) => {
-        this.drivers.set(data.filter((u) => u.role === 'driver' && u.is_active !== false));
-        this.conductors.set(data.filter((u) => u.role === 'conductor' && u.is_active !== false));
-      },
-    });
-  }
-
-  loadRoutes(): void {
-    this.http.get<{ id: number; origin: string; destination: string }[]>(this.ROUTES_API, { withCredentials: true }).subscribe({
-      next: (data) => this.routes.set(data),
     });
   }
 
@@ -197,8 +128,8 @@ export class Buses implements OnInit {
   setPage(p: number): void { this.currentPage.set(p); }
   onPageSizeChange(s: number): void { this.pageSize.set(s); this.currentPage.set(1); }
 
-  openAdd(): void { this.editingBus.set(null); this.form.reset({ status: 'active', route_id: null }); this.showModal.set(true); }
-  openEdit(bus: Bus): void { this.editingBus.set(bus); this.form.patchValue({ ...bus, route_id: bus.route_id ?? null }); this.showModal.set(true); }
+  openAdd(): void { this.editingBus.set(null); this.form.reset({ status: 'active' }); this.showModal.set(true); }
+  openEdit(bus: Bus): void { this.editingBus.set(bus); this.form.patchValue(bus); this.showModal.set(true); }
   closeModal(): void { this.showModal.set(false); }
 
   save(): void {
@@ -222,22 +153,6 @@ export class Buses implements OnInit {
     this.http.delete(`${this.API}/${bus.id}`, { withCredentials: true }).subscribe({
       next: () => { this.alertService.success('Deleted', 'Bus removed.'); this.showDeleteModal.set(false); this.loadBuses(); },
       error: (err) => this.alertService.error('Error', err.error?.message ?? 'Could not delete bus.'),
-    });
-  }
-
-  openAssignCrew(bus: Bus): void {
-    this.assigningBus.set(bus);
-    this.crewForm.patchValue({ driver_id: bus.driver_id ?? null, conductor_id: bus.conductor_id ?? null });
-    this.showCrewModal.set(true);
-  }
-  closeCrewModal(): void { this.showCrewModal.set(false); }
-
-  saveCrew(): void {
-    const bus = this.assigningBus();
-    if (!bus) return;
-    this.http.put(`${this.API}/${bus.id}/assign-crew`, this.crewForm.value, { withCredentials: true }).subscribe({
-      next: () => { this.alertService.success('Saved', 'Crew assigned.'); this.closeCrewModal(); this.loadBuses(); },
-      error: (err) => this.alertService.error('Error', err.error?.message ?? 'Could not assign crew.'),
     });
   }
 

@@ -1,14 +1,24 @@
 const { Op } = require("sequelize");
-const { BusInfo, User, Trip, Route, CrewAssignment, BusCrewHistory } = require("../models");
+const { BusInfo, User, Trip, Route, BusCrewHistory } = require("../models");
 const {
   fullName,
   sendTripScheduledEmail,
   sendTripsScheduledSummaryEmail,
   sendTripsScheduledManagementEmail,
+  sendTripScheduleUpdatedEmail,
   sendCrewAssignmentEmail,
 } = require("../config/mailer");
 const { OWNER_LEVEL_ROLES } = require("../middleware/auth");
 const { createNotification } = require("../services/notificationService");
+const {
+  addCalendarDays,
+  assignTripNumbersByManilaDay,
+  isValidDateKey,
+  manilaDateKey,
+  manilaDayBounds,
+  manilaToday,
+  parseManilaDateTime,
+} = require("../utils/manilaTime");
 
 const notify = (promise) => promise.catch((err) => console.error("Email notification failed:", err));
 
@@ -27,42 +37,10 @@ const formatTime = (value) =>
     timeZone: "Asia/Manila",
   });
 
-const busInclude = [
-  {
-    model: User,
-    as: "driver",
-    attributes: ["id", "first_name", "last_name", "employee_id"],
-    foreignKey: "driver_id",
-  },
-  {
-    model: User,
-    as: "conductor",
-    attributes: ["id", "first_name", "last_name", "employee_id"],
-    foreignKey: "conductor_id",
-  },
-];
-
 // GET /api/buses
 const getBuses = async (req, res) => {
   const buses = await BusInfo.findAll({
     order: [["bus_number", "ASC"]],
-    include: [
-      {
-        model: User,
-        as: "assignedDriver",
-        attributes: ["id", "first_name", "last_name", "employee_id"],
-      },
-      {
-        model: User,
-        as: "assignedConductor",
-        attributes: ["id", "first_name", "last_name", "employee_id"],
-      },
-      {
-        model: Route,
-        as: "defaultRoute",
-        attributes: ["id", "origin", "destination"],
-      },
-    ],
   });
   return res.json(buses);
 };
@@ -83,13 +61,12 @@ const createBus = async (req, res) => {
 const updateBus = async (req, res) => {
   const bus = await BusInfo.findByPk(req.params.id);
   if (!bus) return res.status(404).json({ message: "Bus not found." });
-  const { bus_number, plate_number, capacity, status, route_id } = req.body;
+  const { bus_number, plate_number, capacity, status } = req.body;
   await bus.update({
     bus_number,
     plate_number,
     capacity,
     status,
-    route_id: route_id ?? null,
   });
   return res.json(bus);
 };
@@ -190,29 +167,27 @@ const assignCrew = async (req, res) => {
 
 // GET /api/buses/trips?date=YYYY-MM-DD  OR  ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
 const getTrips = async (req, res) => {
-  let start, end;
-
-  if (req.query.startDate && req.query.endDate) {
-    start = new Date(req.query.startDate);
-    start.setHours(0, 0, 0, 0);
-    end = new Date(req.query.endDate);
-    end.setHours(23, 59, 59, 999);
+  const { date, startDate, endDate } = req.query;
+  let fromKey;
+  let toKey;
+  if (startDate || endDate) {
+    if (!isValidDateKey(startDate) || !isValidDateKey(endDate) || startDate > endDate) {
+      return res.status(400).json({ message: "Provide a valid startDate and endDate in YYYY-MM-DD format." });
+    }
+    fromKey = startDate;
+    toKey = endDate;
   } else {
-    const date = req.query.date
-      ? new Date(req.query.date)
-      : (() => {
-          const d = new Date();
-          d.setDate(d.getDate() + 1);
-          return d;
-        })();
-    start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-    end = new Date(date);
-    end.setHours(23, 59, 59, 999);
+    fromKey = date || addCalendarDays(manilaToday(), 1);
+    if (!isValidDateKey(fromKey)) {
+      return res.status(400).json({ message: "Provide a valid date in YYYY-MM-DD format." });
+    }
+    toKey = fromKey;
   }
+  const start = manilaDayBounds(fromKey).start;
+  const endExclusive = manilaDayBounds(toKey).endExclusive;
 
   const trips = await Trip.findAll({
-    where: { departure_time: { [Op.between]: [start, end] } },
+    where: { departure_time: { [Op.gte]: start, [Op.lt]: endExclusive } },
     include: [
       { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
       { model: Route, attributes: ["id", "origin", "destination"] },
@@ -301,11 +276,91 @@ const notifyManagementOfSchedule = async ({ busLabel, date, driver, conductor, t
   }
 };
 
+const notifyTripScheduleUpdated = async (before, after) => {
+  const affectedIds = [...new Set([before.driver_id, before.conductor_id, after.driver_id, after.conductor_id].filter(Boolean))];
+  const [bus, route, driver, conductor, crewUsers, managers] = await Promise.all([
+    BusInfo.findByPk(after.bus_id),
+    Route.findByPk(after.route_id),
+    User.findByPk(after.driver_id),
+    User.findByPk(after.conductor_id),
+    User.findAll({ where: { id: affectedIds } }),
+    User.findAll({ where: { role: OWNER_LEVEL_ROLES, is_active: true } }),
+  ]);
+  const busLabel = bus?.bus_number ?? String(after.bus_id);
+  const routeLabel = route ? `${route.origin} → ${route.destination}` : "";
+  const affectedCrew = new Map([
+    [before.driver_id, "/driver/dashboard"],
+    [before.conductor_id, "/conductor/trips"],
+    [after.driver_id, "/driver/dashboard"],
+    [after.conductor_id, "/conductor/trips"],
+  ]);
+
+  for (const [userId, link] of affectedCrew) {
+    if (!userId) continue;
+    await createNotification({
+      userId,
+      type: "schedule_updated",
+      title: "Schedule updated",
+      message: `Trip #${after.trip_number} · Bus ${busLabel}${routeLabel ? ` · ${routeLabel}` : ""} is now scheduled for ${formatDate(after.departure_time)} at ${formatTime(after.departure_time)}.`,
+      link,
+    });
+  }
+
+  for (const user of crewUsers) {
+    notify(sendTripScheduleUpdatedEmail({
+      to: user.email,
+      name: fullName(user),
+      busLabel,
+      tripNumber: after.trip_number,
+      routeLabel,
+      driverName: driver ? fullName(driver) : "Unassigned",
+      conductorName: conductor ? fullName(conductor) : "Unassigned",
+      departureTime: after.departure_time,
+    }));
+  }
+
+  for (const manager of managers) {
+    await createNotification({
+      userId: manager.id,
+      type: "schedule_updated",
+      title: "Schedule updated",
+      message: `Trip #${after.trip_number} on Bus ${busLabel} was updated for ${formatDate(after.departure_time)} at ${formatTime(after.departure_time)}.`,
+      link: "/owner/schedules",
+    });
+    notify(sendTripScheduleUpdatedEmail({
+      to: manager.email,
+      name: fullName(manager),
+      busLabel,
+      tripNumber: after.trip_number,
+      routeLabel,
+      driverName: driver ? fullName(driver) : "Unassigned",
+      conductorName: conductor ? fullName(conductor) : "Unassigned",
+      departureTime: after.departure_time,
+    }));
+  }
+};
+
+const validateScheduleResources = async ({ bus_id, driver_id, conductor_id, route_id }) => {
+  const [bus, driver, conductor, route] = await Promise.all([
+    BusInfo.findByPk(bus_id),
+    User.findOne({ where: { id: driver_id, role: "driver", is_active: true } }),
+    User.findOne({ where: { id: conductor_id, role: "conductor", is_active: true } }),
+    route_id ? Route.findByPk(route_id) : null,
+  ]);
+  if (!bus || bus.status !== "active") {
+    return { status: 400, message: "Select an active bus." };
+  }
+  if (!driver) return { status: 400, message: "Select an active driver." };
+  if (!conductor) return { status: 400, message: "Select an active conductor." };
+  if (route_id && !route) return { status: 400, message: "Select a valid route." };
+  return { bus, driver, conductor, route };
+};
+
 // Returns a message when the bus, the driver or the conductor already has a trip
 // (not cancelled) at the same date and time, otherwise null.
-const findScheduleConflict = async ({ bus_id, driver_id, conductor_id, departure_time }) => {
-  const when = new Date(departure_time);
-  if (Number.isNaN(when.getTime())) return null;
+const findScheduleConflict = async ({ bus_id, driver_id, conductor_id, departure_time, excludeTripId }) => {
+  const when = parseManilaDateTime(departure_time);
+  if (!when) return "Provide a valid departure date and time.";
   const slotStart = new Date(when);
   slotStart.setSeconds(0, 0);
   const slotEnd = new Date(slotStart.getTime() + 60 * 1000);
@@ -318,6 +373,7 @@ const findScheduleConflict = async ({ bus_id, driver_id, conductor_id, departure
     where: {
       status: { [Op.ne]: "cancelled" },
       departure_time: { [Op.gte]: slotStart, [Op.lt]: slotEnd },
+      ...(excludeTripId ? { id: { [Op.ne]: excludeTripId } } : {}),
       [Op.or]: who,
     },
   });
@@ -343,7 +399,18 @@ const createTrip = async (req, res) => {
     departure_time,
   } = req.body;
 
-  const conflict = await findScheduleConflict({ bus_id, driver_id, conductor_id, departure_time });
+  if (!bus_id || !route_id || !driver_id || !conductor_id || !trip_number || !departure_time || Number.isNaN(new Date(departure_time).getTime())) {
+    return res.status(400).json({ message: "Bus, route, active driver, active conductor, trip number, and valid departure time are required." });
+  }
+  const parsedDeparture = parseManilaDateTime(departure_time);
+  if (!parsedDeparture) {
+    return res.status(400).json({ message: "Provide a valid departure date and time." });
+  }
+
+  const resources = await validateScheduleResources({ bus_id, driver_id, conductor_id, route_id });
+  if (resources.status) return res.status(resources.status).json({ message: resources.message });
+
+  const conflict = await findScheduleConflict({ bus_id, driver_id, conductor_id, departure_time: parsedDeparture });
   if (conflict) return res.status(409).json({ message: conflict });
 
   const trip = await Trip.create({
@@ -352,11 +419,11 @@ const createTrip = async (req, res) => {
     driver_id,
     conductor_id,
     trip_number,
-    departure_time,
+    departure_time: parsedDeparture,
     status: "scheduled",
   });
 
-  notify(notifyTripScheduled({ bus_id, route_id, driver_id, conductor_id, trip_number, departure_time }));
+  notify(notifyTripScheduled({ bus_id, route_id, driver_id, conductor_id, trip_number, departure_time: parsedDeparture }));
 
   return res.status(201).json(trip);
 };
@@ -376,17 +443,23 @@ const createTripsBulkInner = async (req, res) => {
       message: "bus_id, driver_id, conductor_id and trips[] are required.",
     });
   }
-  // The date is optional: it defaults to the day of the first departure (YYYY-MM-DD).
-  const date = req.body.date || String(trips[0].departure_time || "").slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ message: "A valid departure date and time is required." });
+  const resources = await validateScheduleResources({ bus_id, driver_id, conductor_id });
+  if (resources.status) return res.status(resources.status).json({ message: resources.message });
+  const parsedTrips = trips.map((trip) => ({
+    ...trip,
+    departureDate: parseManilaDateTime(trip?.departure_time),
+  }));
+  if (parsedTrips.some((trip) => !trip.route_id || !trip.departureDate)) {
+    return res.status(400).json({ message: "Every trip must include a valid route and departure time." });
   }
 
   // Schedule conflicts: same bus, driver or conductor at the same date and time,
   // either inside this batch or already scheduled.
   const seenSlots = new Set();
-  for (const t of trips) {
-    const slot = new Date(t.departure_time);
+  for (const t of parsedTrips) {
+    const route = await Route.findByPk(t.route_id);
+    if (!route) return res.status(400).json({ message: "Every trip must have a valid route." });
+    const slot = t.departureDate;
     slot.setSeconds(0, 0);
     const key = slot.getTime();
     if (seenSlots.has(key)) {
@@ -399,33 +472,33 @@ const createTripsBulkInner = async (req, res) => {
       bus_id,
       driver_id,
       conductor_id,
-      departure_time: t.departure_time,
+      departure_time: t.departureDate,
     });
     if (conflict) return res.status(409).json({ message: conflict });
   }
 
-  // Find the highest existing trip_number for this bus on this date
-  const dayStart = new Date(date + "T00:00:00");
-  const dayEnd = new Date(date + "T23:59:59");
-  const existing = await Trip.findAll({
-    where: {
-      bus_id,
-      departure_time: { [Op.between]: [dayStart, dayEnd] },
-    },
-    order: [["trip_number", "DESC"]],
-    limit: 1,
-  });
-  let nextTripNumber = existing.length > 0 ? existing[0].trip_number + 1 : 1;
+  const nextTripNumbers = new Map();
+  for (const trip of parsedTrips) {
+    const dayKey = manilaDateKey(trip.departureDate);
+    if (nextTripNumbers.has(dayKey)) continue;
+    const { start, endExclusive } = manilaDayBounds(dayKey);
+    const highest = await Trip.max("trip_number", {
+      where: { bus_id, departure_time: { [Op.gte]: start, [Op.lt]: endExclusive } },
+    });
+    nextTripNumbers.set(dayKey, Number(highest || 0) + 1);
+  }
+  const date = manilaDayBounds(manilaDateKey(parsedTrips[0].departureDate)).start;
 
+  const numberedTrips = assignTripNumbersByManilaDay(parsedTrips, nextTripNumbers);
   const created = [];
-  for (const t of trips) {
+  for (const t of numberedTrips) {
     const trip = await Trip.create({
       bus_id,
       route_id: t.route_id,
       driver_id,
       conductor_id,
-      trip_number: nextTripNumber++,
-      departure_time: t.departure_time,
+      trip_number: t.trip_number,
+      departure_time: t.departureDate,
       status: "scheduled",
     });
     created.push(trip);
@@ -494,14 +567,60 @@ const createTripsBulk = async (req, res) => {
   }
 };
 
+// PUT /api/buses/trips/:id — scheduled trips only
+const updateTrip = async (req, res) => {
+  const trip = await Trip.findByPk(req.params.id);
+  if (!trip) return res.status(404).json({ message: "Trip not found." });
+  if (trip.status !== "scheduled") {
+    return res.status(409).json({ message: "Only scheduled trips can be edited." });
+  }
+
+  const { bus_id, route_id, driver_id, conductor_id, departure_time } = req.body;
+  const nextDeparture = parseManilaDateTime(departure_time);
+  if (!bus_id || !route_id || !driver_id || !conductor_id || !nextDeparture) {
+    return res.status(400).json({ message: "Bus, route, active driver, active conductor, and a valid departure time are required." });
+  }
+
+  const resources = await validateScheduleResources({ bus_id, driver_id, conductor_id, route_id });
+  if (resources.status) return res.status(resources.status).json({ message: resources.message });
+
+  const conflict = await findScheduleConflict({
+    bus_id,
+    driver_id,
+    conductor_id,
+    departure_time: nextDeparture,
+    excludeTripId: trip.id,
+  });
+  if (conflict) return res.status(409).json({ message: conflict });
+
+  const before = trip.get({ plain: true });
+  const previousDeparture = parseManilaDateTime(trip.departure_time);
+  const movedToDifferentScheduleDay =
+    String(bus_id) !== String(trip.bus_id) ||
+    manilaDateKey(nextDeparture) !== manilaDateKey(previousDeparture);
+  let trip_number = trip.trip_number;
+  if (movedToDifferentScheduleDay) {
+    const { start, endExclusive } = manilaDayBounds(manilaDateKey(nextDeparture));
+    const highestTripNumber = await Trip.max("trip_number", {
+      where: { bus_id, departure_time: { [Op.gte]: start, [Op.lt]: endExclusive } },
+    });
+    trip_number = Number(highestTripNumber) + 1;
+  }
+  await trip.update({ bus_id, route_id, driver_id, conductor_id, departure_time: nextDeparture, trip_number });
+  notify(notifyTripScheduleUpdated(before, trip.get({ plain: true })));
+  return res.json(trip);
+};
+
 // DELETE /api/buses/trips/:id
 const deleteTrip = async (req, res) => {
   const trip = await Trip.findByPk(req.params.id);
   if (!trip) return res.status(404).json({ message: "Trip not found." });
+  if (trip.status !== "scheduled") {
+    return res.status(409).json({ message: "Only scheduled trips can be cancelled from the schedule." });
+  }
 
-  // Keep the details before the row is gone.
   const { conductor_id, driver_id, trip_number, departure_time } = trip;
-  await trip.destroy();
+  await trip.update({ status: "cancelled" });
 
   for (const [userId, link] of [
     [conductor_id, "/conductor/trips"],
@@ -557,6 +676,7 @@ module.exports = {
   getTrips,
   createTrip,
   createTripsBulk,
+  updateTrip,
   deleteTrip,
   getRoutes,
 };

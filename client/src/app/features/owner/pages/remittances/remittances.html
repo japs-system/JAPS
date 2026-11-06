@@ -125,6 +125,11 @@
             >
               Audited By
             </th>
+            <th
+              class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            >
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -205,6 +210,18 @@
                   <span class="text-xs text-gray-400">—</span>
                 }
               </td>
+              <td class="px-3 py-3">
+                @if (remit.status === 'submitted' || remit.status === 'rejected') {
+                  <button
+                    (click)="confirmDelete(remit, $event)"
+                    class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                    title="Delete remittance"
+                    aria-label="Delete remittance"
+                  >
+                    <i class="pi pi-trash text-sm"></i>
+                  </button>
+                }
+              </td>
             </tr>
           }
         </tbody>
@@ -225,3 +242,35 @@
     />
   }
 </div>
+
+@if (deletingRemittance(); as remit) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cancelDelete()"></div>
+    <div class="relative bg-white rounded-lg shadow-2xl w-full max-w-sm p-8 text-center">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
+        <i class="pi pi-trash text-red-500 text-2xl"></i>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Remittance</h3>
+      <p class="text-gray-500 text-sm mb-6">
+        Delete the remittance for <strong>{{ remit.date | date: 'MMM dd, yyyy' }}</strong>?
+        This cannot be undone. Approved and finalized remittances cannot be deleted.
+      </p>
+      <div class="flex gap-3">
+        <button
+          (click)="cancelDelete()"
+          [disabled]="deleting()"
+          class="flex-1 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          (click)="deleteRemittance()"
+          [disabled]="deleting()"
+          class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {{ deleting() ? 'Deleting...' : 'Delete' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

@@ -26,12 +26,15 @@ export interface ScheduleBus {
   id: number;
   bus_number: string;
   plate_number: string;
-  driver_id: number | null;
-  conductor_id: number | null;
-  route_id: number | null;
-  assignedDriver?: { id: number; first_name: string; last_name: string } | null;
-  assignedConductor?: { id: number; first_name: string; last_name: string } | null;
-  defaultRoute?: { id: number; origin: string; destination: string } | null;
+  status: 'active' | 'inactive' | 'under_maintenance';
+}
+
+export interface ScheduleCrewMember {
+  id: number;
+  first_name: string;
+  last_name: string;
+  role: 'driver' | 'conductor';
+  is_active: boolean;
 }
 
 export interface ScheduleRoute {
@@ -64,6 +67,11 @@ export class Schedules implements OnInit {
   loading = signal(false);
   saving = signal(false);
   buses = signal<ScheduleBus[]>([]);
+  activeBuses = computed(() => this.buses().filter((bus) => bus.status === 'active'));
+  drivers = signal<ScheduleCrewMember[]>([]);
+  conductors = signal<ScheduleCrewMember[]>([]);
+  filterDrivers = signal<ScheduleCrewMember[]>([]);
+  filterConductors = signal<ScheduleCrewMember[]>([]);
   routes = signal<ScheduleRoute[]>([]);
 
   startDate = signal<string>(this.firstOfMonth());
@@ -91,25 +99,37 @@ export class Schedules implements OnInit {
   });
 
   tripDrivers = computed(() => {
-    const seen = new Set<number>();
-    return this.allTrips()
-      .filter((t) => t.driver && !seen.has(t.driver_id) && !!seen.add(t.driver_id))
-      .map((t) => ({ id: t.driver_id, name: `${t.driver!.first_name} ${t.driver!.last_name}` }));
+    const people = new Map(this.filterDrivers().map((user) => [
+      user.id,
+      `${user.first_name} ${user.last_name}`,
+    ]));
+    for (const trip of this.allTrips()) {
+      if (trip.driver && !people.has(trip.driver_id)) {
+        people.set(trip.driver_id, `${trip.driver.first_name} ${trip.driver.last_name}`);
+      }
+    }
+    return [...people].map(([id, name]) => ({ id, name }));
   });
 
   tripConductors = computed(() => {
-    const seen = new Set<number>();
-    return this.allTrips()
-      .filter((t) => t.conductor && !seen.has(t.conductor_id) && !!seen.add(t.conductor_id))
-      .map((t) => ({
-        id: t.conductor_id,
-        name: `${t.conductor!.first_name} ${t.conductor!.last_name}`,
-      }));
+    const people = new Map(this.filterConductors().map((user) => [
+      user.id,
+      `${user.first_name} ${user.last_name}`,
+    ]));
+    for (const trip of this.allTrips()) {
+      if (trip.conductor && !people.has(trip.conductor_id)) {
+        people.set(trip.conductor_id, `${trip.conductor.first_name} ${trip.conductor.last_name}`);
+      }
+    }
+    return [...people].map(([id, name]) => ({ id, name }));
   });
 
   // ── Modal state ──
   showModal = signal(false);
   selectedBus = signal<ScheduleBus | null>(null);
+  selectedDriverId = signal<number | null>(null);
+  selectedConductorId = signal<number | null>(null);
+  editingTrip = signal<ScheduleTrip | null>(null);
   scheduleDate = signal<string>(this.today());
 
   // The list of trip rows being built
@@ -146,16 +166,13 @@ export class Schedules implements OnInit {
 
   ngOnInit(): void {
     this.loadBuses();
+    this.loadCrew();
     this.loadRoutes();
     this.loadTrips();
   }
 
   loadTrips(): void {
     this.loading.set(true);
-    this.filterBus.set('');
-    this.filterDriver.set('');
-    this.filterConductor.set('');
-    this.filterRoute.set('');
     const url = `${this.BUSES_API}/trips?startDate=${this.startDate()}&endDate=${this.endDate()}`;
     this.http.get<ScheduleTrip[]>(url, { withCredentials: true }).subscribe({
       next: (data) => {
@@ -186,6 +203,21 @@ export class Schedules implements OnInit {
     });
   }
 
+  loadCrew(): void {
+    this.http
+      .get<ScheduleCrewMember[]>(`${environment.apiUrl}/api/users`, { withCredentials: true })
+      .subscribe({
+        next: (data) => {
+          this.drivers.set(data.filter((user) => user.role === 'driver' && user.is_active));
+          this.conductors.set(data.filter((user) => user.role === 'conductor' && user.is_active));
+          this.filterDrivers.set(data.filter((user) => user.role === 'driver'));
+          this.filterConductors.set(data.filter((user) => user.role === 'conductor'));
+        },
+      error: (err) =>
+        this.alertService.error('Error', err.error?.message ?? 'Could not load active crew.'),
+    });
+  }
+
   loadRoutes(): void {
     this.http
       .get<ScheduleRoute[]>(`${this.BUSES_API}/routes`, { withCredentials: true })
@@ -196,7 +228,10 @@ export class Schedules implements OnInit {
 
   // ── Modal ──
   openAdd(): void {
+    this.editingTrip.set(null);
     this.selectedBus.set(null);
+    this.selectedDriverId.set(null);
+    this.selectedConductorId.set(null);
     this.scheduleDate.set(this.today());
     this.tripRows.set([this.newRow()]);
     this.showModal.set(true);
@@ -204,26 +239,47 @@ export class Schedules implements OnInit {
 
   closeModal(): void {
     this.showModal.set(false);
+    this.editingTrip.set(null);
   }
 
   onModalBusChange(e: Event): void {
     const id = Number((e.target as HTMLSelectElement).value);
     const bus = this.buses().find((b) => b.id === id) ?? null;
     this.selectedBus.set(bus);
-    // Pre-fill route on existing rows if bus has a default route
-    if (bus?.route_id) {
-      this.tripRows.update((rows) =>
-        rows.map((r) => ({ ...r, route_id: r.route_id ?? bus.route_id! })),
-      );
-    }
   }
 
   private newRow(): TripRow {
-    const bus = this.selectedBus();
     return {
-      route_id: bus?.route_id ?? null,
+      route_id: null,
       departure_time: `${this.scheduleDate()}T06:00`,
     };
+  }
+
+  onDriverChange(e: Event): void {
+    this.selectedDriverId.set(Number((e.target as HTMLSelectElement).value) || null);
+  }
+
+  onConductorChange(e: Event): void {
+    this.selectedConductorId.set(Number((e.target as HTMLSelectElement).value) || null);
+  }
+
+  private toDateTimeLocal(value: string): string {
+    const date = new Date(value);
+    const pad = (part: number) => String(part).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  openEdit(trip: ScheduleTrip): void {
+    if (trip.status !== 'scheduled') return;
+    this.editingTrip.set(trip);
+    this.selectedBus.set(this.activeBuses().find((bus) => bus.id === trip.bus_id) ?? null);
+    this.selectedDriverId.set(trip.driver_id);
+    this.selectedConductorId.set(trip.conductor_id);
+    this.scheduleDate.set(this.toDateTimeLocal(trip.departure_time).slice(0, 10));
+    this.tripRows.set([
+      { route_id: trip.route_id, departure_time: this.toDateTimeLocal(trip.departure_time) },
+    ]);
+    this.showModal.set(true);
   }
 
   addRow(): void {
@@ -261,36 +317,26 @@ export class Schedules implements OnInit {
     );
   }
 
-  // The API may return crew IDs directly or inside the assigned crew objects.
-  private getSelectedDriverId(): number | null {
-    const bus = this.selectedBus();
-    return bus?.driver_id ?? bus?.assignedDriver?.id ?? null;
-  }
-
-  private getSelectedConductorId(): number | null {
-    const bus = this.selectedBus();
-    return bus?.conductor_id ?? bus?.assignedConductor?.id ?? null;
-  }
-
   canSave(): boolean {
     const bus = this.selectedBus();
     if (!bus) return false;
-    if (!this.getSelectedDriverId() || !this.getSelectedConductorId()) return false;
+    if (!this.selectedDriverId() || !this.selectedConductorId()) return false;
     if (this.tripRows().length === 0) return false;
     return this.tripRows().every((r) => !!r.route_id && !!r.departure_time);
   }
 
   save(): void {
     const bus = this.selectedBus();
-    const driverId = this.getSelectedDriverId();
-    const conductorId = this.getSelectedConductorId();
+    const driverId = this.selectedDriverId();
+    const conductorId = this.selectedConductorId();
+    const editing = this.editingTrip();
 
     if (!bus) {
       this.alertService.error('Error', 'Please select a bus.');
       return;
     }
     if (!driverId || !conductorId) {
-      this.alertService.error('Error', 'Please assign both a driver and a conductor to this bus first.');
+      this.alertService.error('Error', 'Please select an active driver and conductor.');
       return;
     }
     if (this.tripRows().length === 0) {
@@ -310,6 +356,35 @@ export class Schedules implements OnInit {
     }
 
     this.saving.set(true);
+    if (editing) {
+      const row = this.tripRows()[0];
+      this.http
+        .put(
+          `${this.BUSES_API}/trips/${editing.id}`,
+          {
+            bus_id: bus.id,
+            driver_id: driverId,
+            conductor_id: conductorId,
+            route_id: row.route_id,
+            departure_time: row.departure_time,
+          },
+          { withCredentials: true },
+        )
+        .subscribe({
+          next: () => {
+            this.alertService.success('Schedule updated', 'Trip schedule updated and crew notified.');
+            this.saving.set(false);
+            this.closeModal();
+            this.loadTrips();
+          },
+          error: (err) => {
+            this.saving.set(false);
+            this.alertService.error('Error', err.error?.message ?? 'Could not update schedule.');
+          },
+        });
+      return;
+    }
+
     const payload = {
       bus_id: bus.id,
       driver_id: driverId,

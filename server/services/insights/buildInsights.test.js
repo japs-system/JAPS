@@ -14,7 +14,7 @@ test("reports ridership growth against the previous period", () => {
     passengersPrevRange: 1000,
     passengerGrowthPct: "20.0",
   });
-  const i = byTitle(insights, "Ridership is up");
+  const i = byTitle(insights, "More passengers this period");
   assert.ok(i);
   assert.equal(i.tone, "positive");
   assert.match(i.message, /20\.0% more/);
@@ -24,7 +24,7 @@ test("treats small changes as steady and skips when there is no baseline", () =>
   assert.ok(
     byTitle(
       buildInsights({ passengersInRange: 1010, passengersPrevRange: 1000, passengerGrowthPct: "1.0" }),
-      "Ridership is steady",
+      "Passenger count is steady",
     ),
   );
   assert.deepEqual(
@@ -36,7 +36,7 @@ test("treats small changes as steady and skips when there is no baseline", () =>
 test("reports revenue decline", () => {
   const i = byTitle(
     buildInsights({ netGrossInRange: 8000, netGrossPrevRange: 10000 }),
-    "Revenue decreased",
+    "Revenue went down",
   );
   assert.ok(i);
   assert.equal(i.tone, "negative");
@@ -55,8 +55,8 @@ test("names the top route and the busiest hour", () => {
       { hour: 17, ticket_count: "60" },
     ],
   });
-  assert.match(byTitle(insights, "Top-earning route").message, /Calamba → Grand Terminal.*60%/);
-  assert.match(byTitle(insights, "Busiest boarding hour").message, /7 AM/);
+  assert.match(byTitle(insights, "Top-earning route").message, /Calamba → Grand Terminal earned ₱6,000 from 12 trips/);
+  assert.match(byTitle(insights, "Busiest boarding time").message, /7 AM/);
 });
 
 test("flags late departures and high cancellations", () => {
@@ -68,7 +68,7 @@ test("flags late departures and high cancellations", () => {
   assert.equal(late.tone, "warning");
 
   assert.ok(
-    byTitle(buildInsights({ tripsCompleted: 8, tripsCancelled: 2 }), "High cancellation rate"),
+    byTitle(buildInsights({ tripsCompleted: 8, tripsCancelled: 2 }), "Many trips were cancelled"),
   );
 });
 
@@ -79,8 +79,8 @@ test("flags idle buses and pending remittances", () => {
     busesInUseToday: 2,
     remittancePending: 3,
   });
-  assert.ok(byTitle(insights, "Buses sitting idle"));
-  assert.match(byTitle(insights, "Remittances awaiting review").message, /3 remittances are/);
+  assert.ok(byTitle(insights, "Some buses are idle"));
+  assert.match(byTitle(insights, "Remittances need approval").message, /3 remittances are/);
 });
 
 test("compares weekend and weekday demand per day", () => {

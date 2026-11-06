@@ -94,6 +94,7 @@ const sendTripScheduledEmail = async ({
 				new Date(departureTime).toLocaleString("en-PH", {
 					dateStyle: "medium",
 					timeStyle: "short",
+					timeZone: "Asia/Manila",
 				}),
 			),
 		ctaLabel: "View Schedule",
@@ -111,13 +112,14 @@ const sendTripsScheduledSummaryEmail = async ({ to, name, busLabel, date, trips 
 				new Date(t.departureTime).toLocaleString("en-PH", {
 					dateStyle: "medium",
 					timeStyle: "short",
+					timeZone: "Asia/Manila",
 				}),
 			),
 		)
 		.join("");
 	const html = renderEmail({
 		heading: "New Trips Scheduled",
-		intro: `Hi ${name}, ${trips.length} trip${trips.length > 1 ? "s have" : " has"} been added to your schedule for ${new Date(date).toLocaleDateString("en-PH", { dateStyle: "medium" })} on bus ${busLabel}.`,
+		intro: `Hi ${name}, ${trips.length} trip${trips.length > 1 ? "s have" : " has"} been added to your schedule for ${new Date(date).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" })} on bus ${busLabel}.`,
 		tableRows: tripRows,
 		ctaLabel: "View Schedule",
 		ctaUrl: LOGIN_URL(),
@@ -142,18 +144,41 @@ const sendTripsScheduledManagementEmail = async ({
 				new Date(t.departureTime).toLocaleString("en-PH", {
 					dateStyle: "medium",
 					timeStyle: "short",
+					timeZone: "Asia/Manila",
 				}),
 			),
 		)
 		.join("");
 	const html = renderEmail({
 		heading: "Trip Schedule Notice",
-		intro: `Good Day, ${trips.length} trip${trips.length > 1 ? "s have" : " has"} been scheduled on bus ${busLabel} for ${new Date(date).toLocaleDateString("en-PH", { dateStyle: "medium" })}.`,
+		intro: `Good Day, ${trips.length} trip${trips.length > 1 ? "s have" : " has"} been scheduled on bus ${busLabel} for ${new Date(date).toLocaleDateString("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" })}.`,
 		tableRows: row("Driver", driverName) + row("Conductor", conductorName) + tripRows,
 		ctaLabel: "View Schedules",
 		ctaUrl: LOGIN_URL(),
 	});
 	await send(to, `Trip schedule notice — Bus ${busLabel}`, html);
+};
+
+const sendTripScheduleUpdatedEmail = async ({ to, name, busLabel, tripNumber, routeLabel, driverName, conductorName, departureTime }) => {
+	const html = renderEmail({
+		heading: "Trip Schedule Updated",
+		intro: `Hi ${name}, the schedule for Trip #${tripNumber} on Bus ${busLabel} has been updated.`,
+		tableRows:
+			row("Route", routeLabel) +
+			row("Driver", driverName) +
+			row("Conductor", conductorName) +
+			row(
+				"Departure",
+				new Date(departureTime).toLocaleString("en-PH", {
+					dateStyle: "medium",
+					timeStyle: "short",
+					timeZone: "Asia/Manila",
+				}),
+			),
+		ctaLabel: "View Schedule",
+		ctaUrl: LOGIN_URL(),
+	});
+	await send(to, `Trip schedule updated — Bus ${busLabel}`, html);
 };
 
 // Notify a driver/conductor that they've been assigned/unassigned to a bus.
@@ -254,6 +279,7 @@ module.exports = {
 	sendTripScheduledEmail,
 	sendTripsScheduledSummaryEmail,
 	sendTripsScheduledManagementEmail,
+	sendTripScheduleUpdatedEmail,
 	sendCrewAssignmentEmail,
 	sendRemittanceStatusEmail,
 	sendRemittanceSubmittedEmail,

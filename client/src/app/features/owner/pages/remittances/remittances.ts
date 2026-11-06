@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { environment } from '../../../../../environments/environment';
+import { AlertService } from '../../../../core/services/alert.service';
 import { TablePagination } from '../../../../shared/components/table-pagination/table-pagination';
 import { DashboardRangeService } from '../../../../core/services/dashboard-range.service';
 
@@ -17,7 +18,7 @@ interface Remittance {
   net_collection: number;
   cash_deposit: number;
   cash_received: number | null;
-  status: 'submitted' | 'approved' | 'rejected';
+  status: 'submitted' | 'approved' | 'rejected' | 'finalized';
   resubmitted_at?: string | null;
   submitted_at: string;
   approved_at: string | null;
@@ -38,10 +39,13 @@ export class Remittances implements OnInit {
   private http = inject(HttpClient);
   private route = inject(ActivatedRoute);
   private rangeState = inject(DashboardRangeService);
+  private alertService = inject(AlertService);
   private readonly API = `${environment.apiUrl}/api/owner`;
 
   private allRemittances = signal<Remittance[]>([]);
   loading = signal(false);
+  deletingRemittance = signal<Remittance | null>(null);
+  deleting = signal(false);
 
   search = signal('');
   statusFilter = signal<string>('all');
@@ -161,6 +165,36 @@ export class Remittances implements OnInit {
   onPageSizeChange(size: number): void {
     this.pageSize.set(size);
     this.currentPage.set(1);
+  }
+
+  confirmDelete(remittance: Remittance, event: Event): void {
+    event.stopPropagation();
+    this.deletingRemittance.set(remittance);
+  }
+
+  cancelDelete(): void {
+    if (!this.deleting()) this.deletingRemittance.set(null);
+  }
+
+  deleteRemittance(): void {
+    const remittance = this.deletingRemittance();
+    if (!remittance || this.deleting()) return;
+
+    this.deleting.set(true);
+    this.http
+      .delete(`${this.API}/remittances/${remittance.id}`, { withCredentials: true })
+      .subscribe({
+        next: () => {
+          this.allRemittances.update((items) => items.filter((item) => item.id !== remittance.id));
+          this.alertService.success('Deleted', 'Remittance deleted.');
+          this.deletingRemittance.set(null);
+          this.deleting.set(false);
+        },
+        error: (err) => {
+          this.deleting.set(false);
+          this.alertService.error('Delete failed', err.error?.message ?? 'Could not delete remittance.');
+        },
+      });
   }
 
   getStatusBadge(status: string): string {

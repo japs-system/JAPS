@@ -105,6 +105,18 @@ const tripPerformance = ({ tripsCompleted, tripsCancelled }) => {
   };
 };
 
+const departureDelays = ({ avgDepartureDelayMin, tripsWithActualDeparture }) => {
+  const recorded = Number(tripsWithActualDeparture) || 0;
+  const averageDelay = Number(avgDepartureDelayMin);
+  if (recorded === 0 || !Number.isFinite(averageDelay) || averageDelay < 15) return null;
+
+  return {
+    tone: "warning",
+    title: "Departures are running late",
+    message: `Trips with recorded departures are leaving an average of ${Math.round(averageDelay)} minutes late.`,
+  };
+};
+
 // 4. Top-earning route
 const topRoute = ({ routeProfit }) => {
   const routes = (routeProfit ?? []).filter(
@@ -237,6 +249,7 @@ const RULES = [
   passengerTrend,
   revenueTrend,
   tripPerformance,
+  departureDelays,
   topRoute,
   peakHour,
   weekdayVsWeekend,

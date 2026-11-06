@@ -1,7 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Component } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { PrinterSetupPage } from './printer-setup';
 import { PrinterSetupService } from '../../../../core/services/printer-setup.service';
+
+@Component({ standalone: true, template: '' })
+class TicketingStubPage {}
 
 describe('PrinterSetupPage', () => {
   let component: PrinterSetupPage;
@@ -22,7 +26,7 @@ describe('PrinterSetupPage', () => {
     await TestBed.configureTestingModule({
       imports: [PrinterSetupPage],
       providers: [
-        provideRouter([]),
+        provideRouter([{ path: 'conductor/ticketing', component: TicketingStubPage }]),
         {
           provide: PrinterSetupService,
           useValue: {

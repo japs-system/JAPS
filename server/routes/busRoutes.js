@@ -10,6 +10,7 @@ const {
   getTrips,
   createTrip,
   createTripsBulk,
+  updateTrip,
   deleteTrip,
   getRoutes,
 } = require("../controllers/busController");
@@ -27,6 +28,7 @@ router.get("/:id/crew-history", getCrewHistory);
 router.get("/trips", getTrips);
 router.post("/trips/bulk", createTripsBulk);
 router.post("/trips", createTrip);
+router.put("/trips/:id", updateTrip);
 router.delete("/trips/:id", deleteTrip);
 
 router.get("/routes", getRoutes);
