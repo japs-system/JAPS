@@ -482,13 +482,6 @@ router.delete("/remittances/:id", async (req, res) => {
       await transaction.rollback();
       return res.status(404).json({ message: "Remittance not found." });
     }
-    if (remittance.status === "approved" || remittance.status === "finalized") {
-      await transaction.rollback();
-      return res.status(409).json({
-        message: "Approved or finalized remittances cannot be deleted.",
-      });
-    }
-
     await Trip.update(
       { remittance_id: null },
       { where: { remittance_id: remittance.id }, transaction },

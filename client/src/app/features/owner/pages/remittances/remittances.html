@@ -211,16 +211,14 @@
                 }
               </td>
               <td class="px-3 py-3">
-                @if (remit.status === 'submitted' || remit.status === 'rejected') {
-                  <button
-                    (click)="confirmDelete(remit, $event)"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-md transition-colors cursor-pointer"
-                    title="Delete remittance"
-                    aria-label="Delete remittance"
-                  >
-                    <i class="pi pi-trash text-xs"></i> Delete
-                  </button>
-                }
+                <button
+                  (click)="confirmDelete(remit, $event)"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-md transition-colors cursor-pointer"
+                  title="Delete remittance"
+                  aria-label="Delete remittance"
+                >
+                  <i class="pi pi-trash text-xs"></i> Delete
+                </button>
               </td>
             </tr>
           }
@@ -252,8 +250,9 @@
       </div>
       <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Remittance</h3>
       <p class="text-gray-500 text-sm mb-6">
-        Delete the remittance for <strong>{{ remit.date | date: 'MMM dd, yyyy' }}</strong>?
-        This cannot be undone. Approved and finalized remittances cannot be deleted.
+        Permanently delete the <strong>{{ remit.status }}</strong> remittance for
+        <strong>{{ remit.date | date: 'MMM dd, yyyy' }}</strong>? This cannot be undone. The trip
+        history will be kept, but unlinked from this remittance.
       </p>
       <div class="flex gap-3">
         <button
