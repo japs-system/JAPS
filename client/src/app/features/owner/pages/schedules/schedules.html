@@ -140,7 +140,7 @@
             Status
           </th>
           <th
-            class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
+            class="sticky right-0 z-20 bg-gray-50 text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
           >
             Actions
           </th>
@@ -229,22 +229,26 @@
                 }
               }
             </td>
-            <td class="px-5 py-3">
+            <td class="sticky right-0 bg-white px-5 py-3">
               @if (trip.status === 'scheduled') {
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1">
                   <button
                     (click)="openEdit(trip)"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#1E5AAA] hover:bg-blue-50 border border-blue-200 rounded-md transition-colors cursor-pointer"
-                    title="Edit schedule"
+                    class="p-1.5 text-gray-400 hover:text-[#1E5AAA] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                    title="Edit"
+                    aria-label="Edit schedule"
+                    type="button"
                   >
-                    <i class="pi pi-pencil text-xs"></i> Edit
+                    <i class="pi pi-pencil text-sm"></i>
                   </button>
                   <button
                     (click)="confirmDelete(trip)"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-md transition-colors cursor-pointer"
-                    title="Delete schedule"
+                    class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                    title="Delete"
+                    aria-label="Delete schedule"
+                    type="button"
                   >
-                    <i class="pi pi-trash text-xs"></i> Delete
+                    <i class="pi pi-trash text-sm"></i>
                   </button>
                 </div>
               }
@@ -259,29 +263,30 @@
 
 <!-- ═══ Schedule Trips Modal ═══ -->
 @if (showModal()) {
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
     <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="closeModal()"></div>
     <div
-      class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]"
+      class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[94dvh] sm:max-h-[90vh]"
     >
       <!-- Modal header -->
       <div
-        class="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 shrink-0"
+        class="flex items-start sm:items-center justify-between gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-gray-100 shrink-0"
       >
-        <div>
+        <div class="min-w-0">
           <h3 class="text-lg font-semibold text-gray-900">
             {{ editingTrip() ? 'Edit Schedule' : 'Schedule Trips' }}
           </h3>
-          <p class="text-xs text-gray-400 mt-0.5">
+          <p class="text-xs text-gray-400 mt-0.5 leading-snug">
             {{ editingTrip() ? 'Update the bus, crew, route, or departure time.' : 'Assign one or more trips to a bus.' }}
           </p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex shrink-0 items-center gap-1.5 sm:gap-3">
           <span
-            class="flex items-center gap-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5"
+            class="flex items-center gap-1 text-xs sm:text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 sm:px-3 py-1.5"
           >
             <i class="pi pi-calendar text-[#1E5AAA] text-xs"></i>
-            {{ scheduleDate() | date: 'MMM d, y' }}
+            <span class="hidden sm:inline">{{ scheduleDate() | date: 'MMM d, y' }}</span>
+            <span class="sm:hidden">{{ scheduleDate() | date: 'M/d/yy' }}</span>
           </span>
           <button
             (click)="closeModal()"
@@ -293,7 +298,7 @@
       </div>
 
       <!-- Scrollable body -->
-      <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+      <div class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5">
         <!-- Step 1: Bus -->
         <div>
           <label class="block text-xs font-medium text-gray-600 mb-1"
@@ -313,7 +318,7 @@
 
         <!-- Select crew for this schedule -->
         @if (selectedBus()) {
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <label class="block text-xs font-medium text-gray-600">
               Driver <span class="text-red-500">*</span>
               <select
@@ -366,24 +371,24 @@
           </div>
 
           <!-- Column headers -->
-          <div class="grid grid-cols-[2rem_1fr_1fr_2rem] gap-2 px-1 mb-1">
+          <div class="grid grid-cols-[1.5rem_minmax(0,1fr)_2rem] sm:grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)_2rem] gap-x-2 gap-y-1 px-1 mb-1">
             <span class="text-[10px] font-semibold text-gray-400 uppercase">#</span>
             <span class="text-[10px] font-semibold text-gray-400 uppercase">Route</span>
-            <span class="text-[10px] font-semibold text-gray-400 uppercase">Departure Date & Time</span>
-            <span></span>
+            <span class="col-start-2 row-start-2 sm:col-auto sm:row-auto text-[10px] font-semibold text-gray-400 uppercase">Departure date & time</span>
+            <span class="hidden sm:block"></span>
           </div>
 
           <div class="space-y-2">
             @for (row of tripRows(); track $index) {
-              <div class="grid grid-cols-[2rem_1fr_1fr_2rem] gap-2 items-center">
+              <div class="grid grid-cols-[1.5rem_minmax(0,1fr)_2rem] sm:grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)_2rem] gap-x-2 gap-y-2 items-center rounded-lg border border-gray-100 p-2 sm:border-0 sm:p-0">
                 <!-- Trip number preview -->
-                <span class="text-xs font-bold text-gray-400 text-center">{{ $index + 1 }}</span>
+                <span class="row-span-2 sm:row-span-1 text-xs font-bold text-gray-400 text-center">{{ $index + 1 }}</span>
 
                 <!-- Route selector -->
                 <select
                   [value]="row.route_id ?? ''"
                   (change)="updateRowRoute($index, $event)"
-                  class="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white"
+                  class="col-start-2 row-start-1 sm:col-auto sm:row-auto min-w-0 w-full border border-gray-300 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white"
                   [class.border-red-400]="!row.route_id"
                 >
                   <option value="">— Route —</option>
@@ -397,7 +402,7 @@
                   type="datetime-local"
                   [value]="row.departure_time"
                   (change)="updateRowTime($index, $event)"
-                  class="w-full border border-gray-300 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20"
+                  class="col-start-2 row-start-2 sm:col-auto sm:row-auto min-w-0 w-full border border-gray-300 rounded-lg px-2 py-2 text-xs sm:text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20"
                   [class.border-red-400]="!row.departure_time"
                 />
 
@@ -406,7 +411,9 @@
                   <button
                     type="button"
                     (click)="removeRow($index)"
-                    class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                    class="col-start-3 row-start-1 sm:col-auto sm:row-auto w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                    title="Remove trip"
+                    aria-label="Remove trip"
                   >
                     <i class="pi pi-trash text-xs"></i>
                   </button>
@@ -424,7 +431,7 @@
       </div>
 
       <!-- Footer -->
-      <div class="flex items-center justify-between px-6 py-4 border-t border-gray-100 shrink-0">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-100 shrink-0">
         <span class="text-xs text-gray-400">
           @if (editingTrip()) {
             Editing trip #{{ editingTrip()!.trip_number }}
@@ -432,11 +439,11 @@
             {{ tripRows().length }} trip{{ tripRows().length !== 1 ? 's' : '' }} to schedule
           }
         </span>
-        <div class="flex gap-3">
+        <div class="flex gap-2 sm:gap-3">
           <button
             type="button"
             (click)="closeModal()"
-            class="px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+            class="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -444,7 +451,7 @@
             type="button"
             (click)="save()"
             [disabled]="!canSave() || saving()"
-            class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#1E5AAA] hover:bg-[#174d93] text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            class="flex-1 sm:flex-none justify-center px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#1E5AAA] hover:bg-[#174d93] text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             @if (saving()) {
               <i class="pi pi-spinner pi-spin text-xs"></i>
