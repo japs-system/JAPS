@@ -214,11 +214,11 @@
                 @if (remit.status === 'submitted' || remit.status === 'rejected') {
                   <button
                     (click)="confirmDelete(remit, $event)"
-                    class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-md transition-colors cursor-pointer"
                     title="Delete remittance"
                     aria-label="Delete remittance"
                   >
-                    <i class="pi pi-trash text-sm"></i>
+                    <i class="pi pi-trash text-xs"></i> Delete
                   </button>
                 }
               </td>

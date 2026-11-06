@@ -114,4 +114,34 @@ describe('Schedules', () => {
       )
       .flush([]);
   });
+
+  it('cancels a scheduled trip and reloads the schedule list', () => {
+    const trip: ScheduleTrip = {
+      id: 99,
+      bus_id: 10,
+      driver_id: 2,
+      conductor_id: 4,
+      route_id: 40,
+      trip_number: 3,
+      departure_time: '2026-11-07T04:00:00.000Z',
+      actual_departure_time: null,
+      arrival_time: null,
+      status: 'scheduled',
+    };
+
+    component.confirmDelete(trip);
+    expect(component.showDeleteModal()).toBe(true);
+
+    component.deleteTrip();
+    const request = httpMock.expectOne(`${environment.apiUrl}/api/buses/trips/99`);
+    expect(request.request.method).toBe('DELETE');
+    request.flush(null);
+
+    httpMock
+      .expectOne(
+        `${environment.apiUrl}/api/buses/trips?startDate=${component.startDate()}&endDate=${component.endDate()}`,
+      )
+      .flush([]);
+    expect(component.showDeleteModal()).toBe(false);
+  });
 });
