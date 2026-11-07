@@ -18,7 +18,7 @@ const COOKIE_OPTIONS = {
   // SameSite=None, which browsers only honor when Secure is also set.
   secure: isProduction,
   sameSite: isProduction ? "none" : "lax",
-  maxAge: 8 * 60 * 60 * 1000, // 8 hours
+  maxAge: 30 * 60 * 1000, // 30 minutes
 };
 
 const login = async (req, res) => {
