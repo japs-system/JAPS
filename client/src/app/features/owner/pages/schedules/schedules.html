@@ -420,7 +420,7 @@
                   [class.border-red-400]="!row.route_id"
                 >
                   <option value="">— Route —</option>
-                  @for (r of routes(); track r.id) {
+                  @for (r of scheduleRoutes(); track r.id) {
                     <option [value]="r.id">{{ r.origin }} → {{ r.destination }}</option>
                   }
                 </select>

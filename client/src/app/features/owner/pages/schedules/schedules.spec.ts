@@ -183,6 +183,32 @@ describe('Schedules', () => {
     expect(component.scheduleConductors().map((user) => user.id)).toContain(13);
   });
 
+  it('shows the existing route and Manila departure time when editing', () => {
+    const route = { id: 40, origin: 'Origin', destination: 'Destination' };
+    const trip: ScheduleTrip = {
+      id: 102,
+      bus_id: 10,
+      driver_id: 2,
+      conductor_id: 4,
+      route_id: route.id,
+      trip_number: 6,
+      departure_time: '2026-11-09T04:00:00.000Z',
+      actual_departure_time: null,
+      arrival_time: null,
+      status: 'scheduled',
+      Route: route,
+    };
+
+    component.routes.set([]);
+    component.openEdit(trip);
+
+    expect(component.scheduleRoutes()).toContain(route);
+    expect(component.tripRows()[0]).toEqual({
+      route_id: route.id,
+      departure_time: '2026-11-09T12:00',
+    });
+  });
+
   it('cancels a scheduled trip and reloads the schedule list', () => {
     const trip: ScheduleTrip = {
       id: 99,

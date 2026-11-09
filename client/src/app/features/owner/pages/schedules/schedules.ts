@@ -106,6 +106,14 @@ export class Schedules implements OnInit {
     }
     return options;
   });
+  scheduleRoutes = computed(() => {
+    const options = [...this.routes()];
+    const currentRoute = this.editingTrip()?.Route;
+    if (currentRoute && !options.some((route) => route.id === currentRoute.id)) {
+      options.push(currentRoute);
+    }
+    return options;
+  });
 
   startDate = signal<string>(this.firstOfMonth());
   endDate = signal<string>(this.today());
@@ -358,8 +366,18 @@ export class Schedules implements OnInit {
 
   private toDateTimeLocal(value: string): string {
     const date = new Date(value);
-    const pad = (part: number) => String(part).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    if (Number.isNaN(date.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+    const valueFor = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+    return `${valueFor('year')}-${valueFor('month')}-${valueFor('day')}T${valueFor('hour')}:${valueFor('minute')}`;
   }
 
   openEdit(trip: ScheduleTrip): void {
