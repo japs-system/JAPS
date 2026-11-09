@@ -69,7 +69,9 @@ describe('Schedules', () => {
 
     component.onStartDateChange({ target: { value: '2026-11-07' } } as unknown as Event);
     httpMock
-      .expectOne(`${environment.apiUrl}/api/buses/trips?startDate=2026-11-07&endDate=2026-11-07`)
+      .expectOne(
+        `${environment.apiUrl}/api/buses/trips?startDate=2026-11-07&endDate=${component.endDate()}`,
+      )
       .flush([trip]);
 
     expect(component.filterBus()).toBe('10');
@@ -88,7 +90,7 @@ describe('Schedules', () => {
       conductor_id: 4,
       route_id: 40,
       trip_number: 3,
-      departure_time: '2026-11-07T04:00:00.000Z',
+      departure_time: '2030-11-07T04:00:00.000Z',
       actual_departure_time: null,
       arrival_time: null,
       status: 'scheduled',

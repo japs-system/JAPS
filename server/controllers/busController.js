@@ -27,6 +27,7 @@ const {
   manilaDayBounds,
   manilaToday,
   parseManilaDateTime,
+  scheduleDepartureError,
 } = require("../utils/manilaTime");
 
 const notify = (promise) => promise.catch((err) => console.error("Email notification failed:", err));
@@ -415,6 +416,8 @@ const createTrip = async (req, res) => {
   if (!parsedDeparture) {
     return res.status(400).json({ message: "Provide a valid departure date and time." });
   }
+  const departureError = scheduleDepartureError(parsedDeparture);
+  if (departureError) return res.status(400).json({ message: departureError });
 
   const resources = await validateScheduleResources({ bus_id, driver_id, conductor_id, route_id });
   if (resources.status) return res.status(resources.status).json({ message: resources.message });
@@ -460,6 +463,10 @@ const createTripsBulkInner = async (req, res) => {
   }));
   if (parsedTrips.some((trip) => !trip.route_id || !trip.departureDate)) {
     return res.status(400).json({ message: "Every trip must include a valid route and departure time." });
+  }
+  const invalidDeparture = parsedTrips.find((trip) => scheduleDepartureError(trip.departureDate));
+  if (invalidDeparture) {
+    return res.status(400).json({ message: scheduleDepartureError(invalidDeparture.departureDate) });
   }
 
   // Schedule conflicts: same bus, driver or conductor at the same date and time,
@@ -589,6 +596,8 @@ const updateTrip = async (req, res) => {
   if (!bus_id || !route_id || !driver_id || !conductor_id || !nextDeparture) {
     return res.status(400).json({ message: "Bus, route, active driver, active conductor, and a valid departure time are required." });
   }
+  const departureError = scheduleDepartureError(nextDeparture);
+  if (departureError) return res.status(400).json({ message: departureError });
 
   const resources = await validateScheduleResources({ bus_id, driver_id, conductor_id, route_id });
   if (resources.status) return res.status(resources.status).json({ message: resources.message });

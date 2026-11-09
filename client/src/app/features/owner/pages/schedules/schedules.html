@@ -368,6 +368,9 @@
               >
                 Trip numbers auto-assigned
               </span>
+              <span class="block normal-case font-normal tracking-normal text-gray-400 mt-1">
+                Schedule any date through December 31, {{ maxScheduleDateTime.slice(0, 4) }}.
+              </span>
             </p>
             @if (!editingTrip()) {
               <button
@@ -412,6 +415,7 @@
                   type="datetime-local"
                   [value]="row.departure_time"
                   (change)="updateRowTime($index, $event)"
+                  [max]="maxScheduleDateTime"
                   class="col-start-2 row-start-2 sm:col-auto sm:row-auto min-w-0 w-full border border-gray-300 rounded-lg px-2 py-2 text-xs sm:text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20"
                   [class.border-red-400]="!row.departure_time"
                 />

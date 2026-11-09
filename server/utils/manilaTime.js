@@ -60,6 +60,19 @@ const manilaDayBounds = (dateKey) => {
 
 const manilaToday = () => manilaDateKey(new Date());
 
+const scheduleDepartureError = (departure, now = new Date()) => {
+  const parsedDeparture = parseManilaDateTime(departure);
+  if (!parsedDeparture) return "Provide a valid departure date and time.";
+
+  const currentYear = Number(manilaDateKey(now).slice(0, 4));
+  const lastAllowedYear = (Math.floor(currentYear / 5) + 1) * 5;
+  const lastAllowedDate = `${lastAllowedYear}-12-31`;
+  if (manilaDateKey(parsedDeparture) > lastAllowedDate) {
+    return `Trips can only be scheduled through ${lastAllowedDate}.`;
+  }
+  return null;
+};
+
 const addCalendarDays = (dateKey, days) => {
   if (!isValidDateKey(dateKey)) return null;
   const [year, month, day] = dateKey.split("-").map(Number);
@@ -85,4 +98,5 @@ module.exports = {
   manilaDayBounds,
   manilaToday,
   parseManilaDateTime,
+  scheduleDepartureError,
 };

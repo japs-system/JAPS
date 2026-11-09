@@ -139,18 +139,38 @@ export class Schedules implements OnInit {
   deletingTrip = signal<ScheduleTrip | null>(null);
   showDeleteModal = signal(false);
 
-  /** Today's date (YYYY-MM-DD) in the browser's local time. */
+  /** Today's date (YYYY-MM-DD) in Manila time. */
   private today(): string {
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return this.manilaDateTime(new Date()).slice(0, 10);
   }
 
-  /** First day of the current month (YYYY-MM-DD) in the browser's local time. */
+  private manilaDateTime(date: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+    return `${value('year')}-${value('month')}-${value('day')}T${value('hour')}:${value('minute')}`;
+  }
+
+  get maxScheduleDateTime(): string {
+    const currentYear = Number(this.today().slice(0, 4));
+    const maxYear = (Math.floor(currentYear / 5) + 1) * 5;
+    return `${maxYear}-12-31T23:59`;
+  }
+
+  isDepartureAllowed(value: string): boolean {
+    return !!value && value <= this.maxScheduleDateTime;
+  }
+
+  /** First day of the current month (YYYY-MM-DD) in Manila time. */
   private firstOfMonth(): string {
-    const d = new Date();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    return `${d.getFullYear()}-${mm}-01`;
+    return `${this.today().slice(0, 7)}-01`;
   }
 
   get dateLabel(): string {
@@ -288,14 +308,12 @@ export class Schedules implements OnInit {
       const last = rows[rows.length - 1];
       let nextTime = `${this.scheduleDate()}T06:00`;
       if (last?.departure_time) {
-        const d = new Date(last.departure_time);
-        d.setHours(d.getHours() + 1);
-        const yyyy = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const hh = String(d.getHours()).padStart(2, '0');
-        const mm = String(d.getMinutes()).padStart(2, '0');
-        nextTime = `${yyyy}-${month}-${day}T${hh}:${mm}`;
+        const [date, time] = last.departure_time.split('T');
+        const [year, month, day] = date.split('-').map(Number);
+        const [hour, minute] = time.split(':').map(Number);
+        const next = new Date(Date.UTC(year, month - 1, day, hour + 1, minute));
+        const pad = (part: number) => String(part).padStart(2, '0');
+        nextTime = `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}T${pad(next.getUTCHours())}:${pad(next.getUTCMinutes())}`;
       }
       return [...rows, { route_id: last?.route_id ?? null, departure_time: nextTime }];
     });
@@ -322,7 +340,9 @@ export class Schedules implements OnInit {
     if (!bus) return false;
     if (!this.selectedDriverId() || !this.selectedConductorId()) return false;
     if (this.tripRows().length === 0) return false;
-    return this.tripRows().every((r) => !!r.route_id && !!r.departure_time);
+    return this.tripRows().every(
+      (r) => !!r.route_id && this.isDepartureAllowed(r.departure_time),
+    );
   }
 
   save(): void {
@@ -345,6 +365,13 @@ export class Schedules implements OnInit {
     }
     if (!this.tripRows().every((r) => !!r.route_id && !!r.departure_time && !Number.isNaN(new Date(r.departure_time).getTime()))) {
       this.alertService.error('Error', 'Please select a valid route, date, and departure time for every trip.');
+      return;
+    }
+    if (!this.tripRows().every((row) => this.isDepartureAllowed(row.departure_time))) {
+      this.alertService.error(
+        'Invalid departure time',
+        `Schedule departures must be on or before December 31, ${this.maxScheduleDateTime.slice(0, 4)}.`,
+      );
       return;
     }
 

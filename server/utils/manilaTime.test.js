@@ -7,6 +7,7 @@ const {
   manilaDateKey,
   manilaDayBounds,
   parseManilaDateTime,
+  scheduleDepartureError,
 } = require("./manilaTime");
 
 test("parses local schedule inputs as Manila time regardless of process timezone", () => {
@@ -42,4 +43,23 @@ test("assigns trip numbers independently for trips on either side of Manila midn
     ]),
   );
   assert.deepEqual(numbered.map((trip) => trip.trip_number), [4, 1, 2]);
+});
+
+test("allows past schedule dates through the next five-year milestone and rejects later dates", () => {
+  const nowIn2026 = new Date("2026-01-01T00:00:00+08:00");
+  assert.equal(scheduleDepartureError("2030-12-31T23:59", nowIn2026), null);
+  assert.equal(
+    scheduleDepartureError("2031-01-01T00:00", nowIn2026),
+    "Trips can only be scheduled through 2030-12-31.",
+  );
+
+  const now = new Date("2030-01-01T00:00:00+08:00");
+
+  assert.equal(scheduleDepartureError("2029-12-31T23:59", now), null);
+  assert.equal(scheduleDepartureError("2030-01-01T00:01", now), null);
+  assert.equal(scheduleDepartureError("2035-12-31T23:59", now), null);
+  assert.equal(
+    scheduleDepartureError("2036-01-01T00:00", now),
+    "Trips can only be scheduled through 2035-12-31.",
+  );
 });
