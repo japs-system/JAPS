@@ -502,6 +502,7 @@
                       <input
                         formControlName="driver_commission"
                         type="number"
+                        readonly
                         [maxWhole]="5"
                         [maxDecimals]="2"
                         step="0.01"
@@ -522,6 +523,7 @@
                       <input
                         formControlName="conductor_commission"
                         type="number"
+                        readonly
                         [maxWhole]="5"
                         [maxDecimals]="2"
                         step="0.01"
@@ -554,7 +556,7 @@
                   <div>
                     <label
                       class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1"
-                      >Other Deductions (not included)</label
+                      >Other Deductions (included in Total Less)</label
                     >
                     <div class="relative">
                       <span
@@ -804,6 +806,7 @@
                       <input
                         formControlName="driver_commission"
                         type="number"
+                        readonly
                         [maxWhole]="5"
                         [maxDecimals]="2"
                         step="0.01"
@@ -825,6 +828,7 @@
                       <input
                         formControlName="conductor_commission"
                         type="number"
+                        readonly
                         [maxWhole]="5"
                         [maxDecimals]="2"
                         step="0.01"
@@ -857,7 +861,7 @@
                   <div>
                     <label
                       class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1"
-                      >Other Deductions (not included)</label
+                      >Other Deductions (included in Total Less)</label
                     >
                     <div class="relative">
                       <span

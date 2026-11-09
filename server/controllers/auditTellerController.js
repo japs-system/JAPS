@@ -9,7 +9,11 @@ const {
 } = require("../models");
 const { fullName, sendRemittanceStatusEmail } = require("../config/mailer");
 const { createNotification, notifyOwners } = require("../services/notificationService");
-const { calculateTotalLess } = require("../utils/remittanceCalculations");
+const {
+  calculateCommissions,
+  calculateTotalExpenses,
+  calculateTotalLess,
+} = require("../utils/remittanceCalculations");
 
 // Fire-and-forget wrapper: a failed email/notification must never break the real action.
 const notify = (promise) => promise.catch((err) => console.error("Notification failed:", err));
@@ -208,9 +212,6 @@ const updateRemittance = async (req, res) => {
 
     const {
       gross_income,
-      total_expenses,
-      driver_commission,
-      conductor_commission,
       bonus_allowance,
       other_deductions,
       cash_deposit,
@@ -219,15 +220,17 @@ const updateRemittance = async (req, res) => {
       teller_remarks,
     } = req.body;
 
-    const netGross = Number(gross_income) - Number(total_expenses);
     const expenses = await RemittanceExpense.findAll({
       where: { remittance_id: remittance.id },
     });
+    const totalExpenses = calculateTotalExpenses(expenses);
+    const netGross = Number(gross_income) - totalExpenses;
+    const commissions = calculateCommissions(netGross);
     const totalLess = calculateTotalLess({
       expenses,
-      driver_commission,
-      conductor_commission,
+      ...commissions,
       bonus_allowance,
+      other_deductions,
       cash_deposit,
       driver_officer_share,
       conductor_officer_share,
@@ -236,10 +239,9 @@ const updateRemittance = async (req, res) => {
 
     await remittance.update({
       gross_income,
-      total_expenses,
+      total_expenses: totalExpenses,
       net_gross: netGross,
-      driver_commission,
-      conductor_commission,
+      ...commissions,
       bonus_allowance: bonus_allowance || 0,
       other_deductions: other_deductions || 0,
       cash_deposit,

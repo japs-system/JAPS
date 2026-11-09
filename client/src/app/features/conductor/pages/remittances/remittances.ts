@@ -104,8 +104,14 @@ const EXPENSE_FIELDS = [
   { ctrl: 'exp_miscellaneous', label: 'Miscellaneous' },
 ];
 
-const sumExpenseFields = (f: any): number =>
-  EXPENSE_FIELDS.reduce((sum, field) => sum + Number(f?.[field.ctrl] || 0), 0);
+const sumExpenseFields = (f: any): number => {
+  const total = EXPENSE_FIELDS.reduce((sum, field) => {
+    if (field.ctrl === 'exp_miscellaneous') return sum;
+    const amount = Number(f?.[field.ctrl] || 0);
+    return sum + (field.ctrl === 'exp_diesel' ? amount / 2 : amount);
+  }, 0);
+  return Math.round((total + Number.EPSILON) * 100) / 100;
+};
 
 const sumLessFields = (f: any): number => {
   const total =
@@ -114,10 +120,19 @@ const sumLessFields = (f: any): number => {
     Number(f?.driver_commission || 0) +
     Number(f?.conductor_commission || 0) +
     Number(f?.bonus_allowance || 0) +
+    Number(f?.other_deductions || 0) +
     Number(f?.cash_deposit || 0) +
     Number(f?.driver_officer_share || 0) +
     Number(f?.conductor_officer_share || 0);
   return Math.round((total + Number.EPSILON) * 100) / 100;
+};
+
+const calculateCommissions = (netGross: number) => {
+  const net = Math.max(0, netGross);
+  return {
+    driver_commission: Math.round(net * 0.12),
+    conductor_commission: Math.round(net * 0.1),
+  };
 };
 
 const manilaDateString = (date: Date): string => {
@@ -219,15 +234,18 @@ export class ConductorRemittancesPage implements OnInit {
   }
 
   ngOnInit(): void {
-  this.loadRemittances();
-  this.loadBuses();
-  this.remittanceForm.valueChanges.subscribe((v) => {
-    this.formValues.set(v);
-    this.autoCalculateCommissions();
-  });
-  this.formValues.set(this.remittanceForm.value);
-  this.editForm.valueChanges.subscribe((v) => this.editValues.set(v));
-}
+    this.loadRemittances();
+    this.loadBuses();
+    this.remittanceForm.valueChanges.subscribe((values) => {
+      this.formValues.set(values);
+      this.autoCalculateCommissions();
+    });
+    this.formValues.set(this.remittanceForm.getRawValue());
+    this.editForm.valueChanges.subscribe(() => {
+      this.updateEditCommissions();
+      this.editValues.set(this.editForm.getRawValue());
+    });
+  }
 
   setTab(tab: Tab): void {
     this.activeTab.set(tab);
@@ -406,8 +424,16 @@ export class ConductorRemittancesPage implements OnInit {
       if (ctrl) values[ctrl] += Number(exp.amount);
     }
     this.editForm.reset(values);
-    this.editValues.set(this.editForm.value);
+    this.updateEditCommissions();
+    this.editValues.set(this.editForm.getRawValue());
     this.editing.set(true);
+  }
+
+  private updateEditCommissions(): void {
+    const formValues = this.editForm.getRawValue();
+    const grossIncome = Number(this.selected()?.gross_income ?? 0);
+    const commissions = calculateCommissions(grossIncome - sumExpenseFields(formValues));
+    this.editForm.patchValue(commissions, { emitEvent: false });
   }
 
   cancelEdit(): void {
@@ -429,8 +455,6 @@ export class ConductorRemittancesPage implements OnInit {
         `${this.API}/remittances/${r.id}`,
         {
           expenses: this.buildExpensesPayload(f),
-          driver_commission: Number(f.driver_commission || 0),
-          conductor_commission: Number(f.conductor_commission || 0),
           bonus_allowance: Number(f.bonus_allowance || 0),
           other_deductions: Number(f.other_deductions || 0),
           cash_deposit: Number(f.cash_deposit || 0),
@@ -606,38 +630,28 @@ export class ConductorRemittancesPage implements OnInit {
 
   selectedTrips = computed(() => this.allTrips().filter((t) => this.selectedTripIds().has(t.id)));
 
-  /** Commissions are a share of Net Gross (gross income minus expenses), rounded to whole pesos.
- *  A field the conductor has typed into by hand is left alone. */
+  /** Commissions are calculated from Net Gross and cannot be manually overridden. */
   autoCalculateCommissions(): void {
-    const net = Math.max(0, this.netGross());
-    const driver = Math.round(net * 0.12);
-    const conductor = Math.round(net * 0.1);
-    const form = this.remittanceForm;
-    const patch: Record<string, number> = {};
-    if (!form.get('driver_commission')!.dirty && form.value.driver_commission !== driver) {
-      patch['driver_commission'] = driver;
-    }
-    if (!form.get('conductor_commission')!.dirty && form.value.conductor_commission !== conductor) {
-      patch['conductor_commission'] = conductor;
-    }
-    if (Object.keys(patch).length) form.patchValue(patch);
+    const commissions = calculateCommissions(this.netGross());
+    this.remittanceForm.patchValue(commissions, { emitEvent: false });
+    this.formValues.set(this.remittanceForm.getRawValue());
   }
 
   grossIncome = computed(() => this.selectedTrips().reduce((sum, t) => sum + this.tripAmount(t), 0));
 
   totalExpenses = computed(() => {
     const f = this.formValues();
-    return [
+    const total = [
       f.exp_officer,
       f.exp_toll_fees,
       f.exp_parking,
       f.exp_ppa,
       f.exp_washing,
-      f.exp_diesel,
+      Number(f.exp_diesel || 0) / 2,
       f.exp_caller_grand_terminal,
       f.exp_caller_calamba_terminal,
-      f.exp_miscellaneous,
     ].reduce((sum, v) => sum + Number(v || 0), 0);
+    return Math.round((total + Number.EPSILON) * 100) / 100;
   });
 
   netGross = computed(() => this.grossIncome() - this.totalExpenses());
@@ -757,6 +771,7 @@ export class ConductorRemittancesPage implements OnInit {
           this.allTrips.set([]);
           this.selectedTripIds.set(new Set());
           this.manualEntries.set({});
+          this.autoCalculateCommissions();
           this.loadRemittances();
           this.activeTab.set('list');
         },

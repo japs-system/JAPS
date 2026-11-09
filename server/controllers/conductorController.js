@@ -30,7 +30,11 @@ const {
   notifyOwners,
   notifyRoles,
 } = require("../services/notificationService");
-const { calculateTotalLess } = require("../utils/remittanceCalculations");
+const {
+  calculateCommissions,
+  calculateTotalExpenses,
+  calculateTotalLess,
+} = require("../utils/remittanceCalculations");
 const { toManualTicketRow } = require("../utils/manualTicket");
 
 // Fire-and-forget wrapper: a failed email/notification must never break the real action.
@@ -787,8 +791,6 @@ const submitRemittance = async (req, res) => {
       trip_ids, // array of trip IDs completed
       expenses = [], // array of { expense_type, amount }
       manual_trips = [],
-      driver_commission = 0,
-      conductor_commission = 0,
       bonus_allowance = 0,
       other_deductions = 0,
       cash_deposit = 0,
@@ -810,8 +812,6 @@ const submitRemittance = async (req, res) => {
 
     const isValidAmount = isValidRemittanceAmount;
     const amountsOk = [
-      driver_commission,
-      conductor_commission,
       bonus_allowance,
       other_deductions,
       cash_deposit,
@@ -872,17 +872,16 @@ const submitRemittance = async (req, res) => {
       (sum, t) => sum + Number(t.grand_total),
       0,
     );
-    const totalExpenses = expenses.reduce(
-      (sum, e) => sum + Number(e.amount),
-      0,
-    );
+    const totalExpenses = calculateTotalExpenses(expenses);
     const netGross = grossIncome - totalExpenses;
+    const { driver_commission, conductor_commission } = calculateCommissions(netGross);
 
     const totalLess = calculateTotalLess({
       expenses,
       driver_commission,
       conductor_commission,
       bonus_allowance,
+      other_deductions,
       cash_deposit,
       driver_officer_share,
       conductor_officer_share,
@@ -1003,8 +1002,6 @@ const resubmitRemittance = async (req, res) => {
 
     const expenses = Array.isArray(req.body.expenses) ? req.body.expenses : [];
     const amountFields = [
-      "driver_commission",
-      "conductor_commission",
       "bonus_allowance",
       "other_deductions",
       "cash_deposit",
@@ -1024,14 +1021,16 @@ const resubmitRemittance = async (req, res) => {
       return res.status(400).json({ message: "Amounts must be 0 to 99,999.99, with at most 2 decimal places." });
     }
 
-    const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+    const totalExpenses = calculateTotalExpenses(expenses);
     const netGross = Number(remittance.gross_income) - totalExpenses;
-    const totalLess = calculateTotalLess({ expenses, ...amounts });
+    const commissions = calculateCommissions(netGross);
+    const totalLess = calculateTotalLess({ expenses, ...amounts, ...commissions });
     const netCollection = netGross - totalLess;
 
     await remittance.update(
       {
         ...amounts,
+        ...commissions,
         total_expenses: totalExpenses,
         net_gross: netGross,
         total_less: totalLess,

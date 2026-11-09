@@ -345,7 +345,7 @@ export class Schedules implements OnInit {
 
   onModalBusChange(e: Event): void {
     const id = Number((e.target as HTMLSelectElement).value);
-    const bus = this.buses().find((b) => b.id === id) ?? null;
+    const bus = this.scheduleBuses().find((option) => option.id === id) ?? null;
     this.selectedBus.set(bus);
   }
 

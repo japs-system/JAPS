@@ -183,11 +183,12 @@ describe('Schedules', () => {
     expect(component.scheduleConductors().map((user) => user.id)).toContain(13);
   });
 
-  it('shows the existing route and Manila departure time when editing', () => {
+  it('shows all existing assignments and the Manila departure time in the edit form', () => {
+    const bus = { id: 10, bus_number: 'BUS-10', plate_number: 'ABC-010', status: 'active' as const };
     const route = { id: 40, origin: 'Origin', destination: 'Destination' };
     const trip: ScheduleTrip = {
       id: 102,
-      bus_id: 10,
+      bus_id: bus.id,
       driver_id: 2,
       conductor_id: 4,
       route_id: route.id,
@@ -196,17 +197,35 @@ describe('Schedules', () => {
       actual_departure_time: null,
       arrival_time: null,
       status: 'scheduled',
+      BusModel: bus,
       Route: route,
+      driver: { id: 2, first_name: 'Active', last_name: 'Driver', is_active: true },
+      conductor: { id: 4, first_name: 'Active', last_name: 'Conductor', is_active: true },
     };
 
+    component.buses.set([bus]);
+    component.drivers.set([
+      { ...trip.driver!, role: 'driver', is_active: true },
+    ]);
+    component.conductors.set([
+      { ...trip.conductor!, role: 'conductor', is_active: true },
+    ]);
     component.routes.set([]);
     component.openEdit(trip);
+    fixture.detectChanges();
 
     expect(component.scheduleRoutes()).toContain(route);
-    expect(component.tripRows()[0]).toEqual({
-      route_id: route.id,
-      departure_time: '2026-11-09T12:00',
-    });
+    const modal = fixture.nativeElement.querySelector('.fixed.inset-0.z-50') as HTMLElement;
+    const selects = modal.querySelectorAll('select');
+    const departure = modal.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+
+    expect(Array.from(selects).map((select) => select.selectedOptions[0]?.textContent?.trim())).toEqual([
+      'Bus BUS-10',
+      'Active Driver',
+      'Active Conductor',
+      'Origin → Destination',
+    ]);
+    expect(departure.value).toBe('2026-11-09T12:00');
   });
 
   it('cancels a scheduled trip and reloads the schedule list', () => {

@@ -333,7 +333,7 @@
           >
             <option value="">— Select Bus —</option>
             @for (b of scheduleBuses(); track b.id) {
-              <option [value]="b.id">
+              <option [value]="b.id" [selected]="selectedBus()?.id === b.id">
                 Bus {{ b.bus_number }}{{ b.status !== 'active' ? ' (inactive — current)' : '' }}
               </option>
             }
@@ -352,7 +352,7 @@
               >
                 <option value="">— Select active driver —</option>
                 @for (driver of scheduleDrivers(); track driver.id) {
-                  <option [value]="driver.id">
+                  <option [value]="driver.id" [selected]="selectedDriverId() === driver.id">
                     {{ driver.first_name }} {{ driver.last_name }}{{ !driver.is_active ? ' (inactive — current)' : '' }}
                   </option>
                 }
@@ -367,7 +367,7 @@
               >
                 <option value="">— Select active conductor —</option>
                 @for (conductor of scheduleConductors(); track conductor.id) {
-                  <option [value]="conductor.id">
+                  <option [value]="conductor.id" [selected]="selectedConductorId() === conductor.id">
                     {{ conductor.first_name }} {{ conductor.last_name }}{{ !conductor.is_active ? ' (inactive — current)' : '' }}
                   </option>
                 }
@@ -421,7 +421,7 @@
                 >
                   <option value="">— Route —</option>
                   @for (r of scheduleRoutes(); track r.id) {
-                    <option [value]="r.id">{{ r.origin }} → {{ r.destination }}</option>
+                    <option [value]="r.id" [selected]="row.route_id === r.id">{{ r.origin }} → {{ r.destination }}</option>
                   }
                 </select>
 
