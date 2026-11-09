@@ -64,6 +64,12 @@ export class RemittanceDetailPage implements OnInit {
     return r ? Number(r.net_collection) + Number(r.cash_deposit) : 0;
   });
 
+  expenseAmount(type: string): number {
+    return (this.remittance()?.RemittanceExpenses ?? [])
+      .filter((expense) => expense.expense_type === type)
+      .reduce((sum, expense) => sum + Number(expense.amount), 0);
+  }
+
   /** Cash received minus total revenue, rounded to centavos. Null if no cash was recorded. */
   savedDifference = computed(() => {
     const r = this.remittance();

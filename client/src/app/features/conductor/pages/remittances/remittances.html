@@ -383,31 +383,22 @@
                   <!-- Manual encoding for a selected trip that ran without ticketing -->
                   @if (isSelected(t.id) && isManual(t) && manualEntries()[t.id]; as entry) {
                     <div class="px-5 pb-4 pt-1 bg-blue-50 space-y-3">
-                      <div>
-                        <p
-                          class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5"
-                        >
-                          Passengers ({{ manualPassengerTotal(t.id) }})
-                        </p>
-                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                          @for (cat of MANUAL_CATEGORIES; track cat) {
-                            <label class="block">
-                              <span class="block text-[10px] text-gray-500 mb-0.5">{{
-                                categoryLabel(cat)
-                              }}</span>
-                              <input
-                                type="text"
-                                inputmode="numeric"
-                                maxlength="2"
-                                [value]="entry.counts[cat]"
-                                (input)="updateManualCount(t.id, cat, $event)"
-                                class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm font-bold outline-none focus:border-blue-500 bg-white"
-                              />
-                            </label>
-                          }
-                        </div>
-                      </div>
-                      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label class="block">
+                          <span class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5"
+                            >Total Passengers <span class="text-red-500">*</span></span
+                          >
+                          <input
+                            type="text"
+                            inputmode="numeric"
+                            maxlength="4"
+                            required
+                            aria-label="Total passengers, from 1 to 9999"
+                            [value]="entry.totalPassengers"
+                            (input)="updateManualPassengerCount(t.id, $event)"
+                            class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm font-bold outline-none focus:border-blue-500 bg-white"
+                          />
+                        </label>
                         <label class="block">
                           <span class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5"
                             >Cash Collected</span
@@ -427,33 +418,10 @@
                             />
                           </div>
                         </label>
-                        <label class="block">
-                          <span class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5"
-                            >Departed <span class="font-normal normal-case">(optional)</span></span
-                          >
-                          <input
-                            type="datetime-local"
-                            [value]="entry.departure"
-                            [placeholder]="scheduledTimeLocal(t)"
-                            (change)="updateManualTime(t.id, 'departure', $event)"
-                            class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                          />
-                        </label>
-                        <label class="block">
-                          <span class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5"
-                            >Arrived <span class="font-normal normal-case">(optional)</span></span
-                          >
-                          <input
-                            type="datetime-local"
-                            [value]="entry.arrival"
-                            (change)="updateManualTime(t.id, 'arrival', $event)"
-                            class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                          />
-                        </label>
                       </div>
                       <p class="text-[10px] text-gray-400">
-                        Submitting marks this trip completed. Blank times default to the scheduled
-                        departure and the submission time.
+                        Enter the total passengers (1–9,999) and cash collection. Submitting marks
+                        this trip completed and adds its manual ticket range to All Tickets.
                       </p>
                     </div>
                   }
@@ -586,7 +554,7 @@
                   <div>
                     <label
                       class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1"
-                      >Other Deductions</label
+                      >Other Deductions (not included)</label
                     >
                     <div class="relative">
                       <span
@@ -889,7 +857,7 @@
                   <div>
                     <label
                       class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1"
-                      >Other Deductions</label
+                      >Other Deductions (not included)</label
                     >
                     <div class="relative">
                       <span
@@ -1111,6 +1079,18 @@
             <span>-{{ selected()!.total_less | currency: 'PHP' }}</span>
           </div>
           <div class="pl-3 space-y-1.5 border-l-2 border-amber-100 text-xs">
+            @if (expenseAmount(selected()!.RemittanceExpenses, 'miscellaneous') > 0) {
+              <div class="flex justify-between">
+                <span class="text-gray-400">Miscellaneous Fee</span>
+                <span class="text-amber-600">-{{ expenseAmount(selected()!.RemittanceExpenses, 'miscellaneous') | currency: 'PHP' }}</span>
+              </div>
+            }
+            @if (expenseAmount(selected()!.RemittanceExpenses, 'diesel') > 0) {
+              <div class="flex justify-between">
+                <span class="text-gray-400">Half of Diesel</span>
+                <span class="text-amber-600">-{{ expenseAmount(selected()!.RemittanceExpenses, 'diesel') / 2 | currency: 'PHP' }}</span>
+              </div>
+            }
             <div class="flex justify-between">
               <span class="text-gray-400">Driver Commission</span>
               <span class="text-amber-600">-{{ selected()!.driver_commission | currency: 'PHP' : 'symbol' : '1.0-0' }}.00</span>
@@ -1125,15 +1105,17 @@
                 <span class="text-amber-600">-{{ selected()!.bonus_allowance | currency: 'PHP' }}</span>
               </div>
             }
-            @if (+selected()!.other_deductions > 0) {
-              <div class="flex justify-between">
-                <span class="text-gray-400">Other Deductions</span>
-                <span class="text-amber-600">-{{ selected()!.other_deductions | currency: 'PHP' }}</span>
-              </div>
-            }
             <div class="flex justify-between">
               <span class="text-gray-400">Cash Deposit</span>
               <span class="text-amber-600">-{{ selected()!.cash_deposit | currency: 'PHP' }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-400">Driver Share</span>
+              <span class="text-amber-600">-{{ selected()!.driver_officer_share | currency: 'PHP' }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-400">Conductor Share</span>
+              <span class="text-amber-600">-{{ selected()!.conductor_officer_share | currency: 'PHP' }}</span>
             </div>
           </div>
           <div class="flex justify-between bg-blue-50 border border-dashed border-blue-200 rounded-lg p-3 font-bold text-[#1E5AAA]">

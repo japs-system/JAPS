@@ -59,16 +59,16 @@ test("names the top route and the busiest hour", () => {
   assert.match(byTitle(insights, "Busiest boarding time").message, /7 AM/);
 });
 
-test("flags late departures and high cancellations", () => {
-  const late = byTitle(
-    buildInsights({ tripsCompleted: 20, tripsCancelled: 0, avgDepartureDelayMin: 18, tripsWithActualDeparture: 20 }),
-    "Departures are running late",
-  );
-  assert.ok(late);
-  assert.equal(late.tone, "warning");
-
+test("does not report departure delays and still flags high cancellations", () => {
+  const insights = buildInsights({
+    tripsCompleted: 8,
+    tripsCancelled: 2,
+    avgDepartureDelayMin: 18,
+    tripsWithActualDeparture: 20,
+  });
+  assert.equal(byTitle(insights, "Departures are running late"), undefined);
   assert.ok(
-    byTitle(buildInsights({ tripsCompleted: 8, tripsCancelled: 2 }), "Many trips were cancelled"),
+    byTitle(insights, "Many trips were cancelled"),
   );
 });
 

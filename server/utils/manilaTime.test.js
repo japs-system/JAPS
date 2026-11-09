@@ -45,8 +45,13 @@ test("assigns trip numbers independently for trips on either side of Manila midn
   assert.deepEqual(numbered.map((trip) => trip.trip_number), [4, 1, 2]);
 });
 
-test("allows past schedule dates through the next five-year milestone and rejects later dates", () => {
+test("allows today and future schedule dates through the next five-year milestone", () => {
   const nowIn2026 = new Date("2026-01-01T00:00:00+08:00");
+  assert.equal(
+    scheduleDepartureError("2025-12-31T23:59", nowIn2026),
+    "Trips cannot be scheduled before today.",
+  );
+  assert.equal(scheduleDepartureError("2026-01-01T00:00", nowIn2026), null);
   assert.equal(scheduleDepartureError("2030-12-31T23:59", nowIn2026), null);
   assert.equal(
     scheduleDepartureError("2031-01-01T00:00", nowIn2026),
@@ -55,7 +60,7 @@ test("allows past schedule dates through the next five-year milestone and reject
 
   const now = new Date("2030-01-01T00:00:00+08:00");
 
-  assert.equal(scheduleDepartureError("2029-12-31T23:59", now), null);
+  assert.equal(scheduleDepartureError("2029-12-31T23:59", now), "Trips cannot be scheduled before today.");
   assert.equal(scheduleDepartureError("2030-01-01T00:01", now), null);
   assert.equal(scheduleDepartureError("2035-12-31T23:59", now), null);
   assert.equal(

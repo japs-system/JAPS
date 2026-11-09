@@ -17,6 +17,8 @@ interface Ticket {
   category: string | null;
   passengers: TicketPassengerLine[] | null;
   passenger_count: number | null;
+  manual_passenger_count?: number;
+  is_manual?: boolean;
   distance_km: number;
   fare: number;
   issued_at: string;
@@ -92,7 +94,9 @@ export class TicketsPage implements OnInit {
         t.Trip.driver.last_name.toLowerCase().includes(q) ||
         t.Trip.conductor.first_name.toLowerCase().includes(q) ||
         t.Trip.conductor.last_name.toLowerCase().includes(q);
-      const matchCat = cat === 'all' || ticketPassengers(t).some((l) => l.category === cat);
+      const matchCat =
+        cat === 'all' ||
+        (!t.is_manual && ticketPassengers(t).some((l) => l.category === cat));
 
       // Date filtering
       const ticketDate = new Date(t.issued_at);
@@ -216,15 +220,17 @@ export class TicketsPage implements OnInit {
 
   /** e.g. "1 Regular · 2 Student" (works for group and older single-passenger tickets). */
   passengerSummary(t: Ticket): string {
+    if (t.is_manual) return `${t.manual_passenger_count ?? t.passenger_count ?? 0} Passengers`;
     return ticketPassengerSummary(t);
   }
 
   passengerCount(t: Ticket): number {
+    if (t.is_manual) return t.manual_passenger_count ?? t.passenger_count ?? 0;
     return ticketPassengerCount(t);
   }
 
   /** All-regular tickets keep the blue badge; anything with a discount is green. */
   isAllRegular(t: Ticket): boolean {
-    return ticketPassengers(t).every((l) => l.category === 'regular');
+    return !t.is_manual && ticketPassengers(t).every((l) => l.category === 'regular');
   }
 }

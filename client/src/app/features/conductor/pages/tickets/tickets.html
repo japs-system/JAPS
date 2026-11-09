@@ -209,7 +209,7 @@
                 >
                   {{ passengerSummary(ticket) }}
                 </span>
-                @if (passengerCount(ticket) > 1) {
+                @if (passengerCount(ticket) > 1 && !ticket.is_manual) {
                   <span class="block text-[10px] text-gray-400 mt-0.5"
                     >{{ passengerCount(ticket) }} passengers</span
                   >

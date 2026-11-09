@@ -1,5 +1,6 @@
 
 const { FareSettings } = require("../models");
+const { isValidDateKey, manilaToday } = require("../utils/manilaTime");
 
 // Fare configuration: 4 whole digits + 2 decimal places.
 // Allowed range: 0 - 9999.99
@@ -58,12 +59,10 @@ const validateFareSettings = (body) => {
   // Validate effective date.
   const date = body.effective_date;
 
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? "")) ||
-    Number.isNaN(Date.parse(date))
-  ) {
+  if (!isValidDateKey(date)) {
     return "Effective date is required (YYYY-MM-DD).";
   }
+  if (date < manilaToday()) return "Effective date cannot be before today.";
 
   return null;
 };

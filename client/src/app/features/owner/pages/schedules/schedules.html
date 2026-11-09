@@ -35,17 +35,17 @@
 <div class="bg-white rounded-lg shadow-sm px-5 py-3 mb-4 flex flex-wrap items-center gap-3">
   <select
     [value]="filterBus()"
-    (change)="filterBus.set($any($event.target).value)"
+    (change)="filterBus.set($any($event.target).value); currentPage.set(1)"
     class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
   >
     <option value="">All Buses</option>
-    @for (b of buses(); track b.id) {
+    @for (b of activeBuses(); track b.id) {
       <option [value]="b.id">{{ b.bus_number }}</option>
     }
   </select>
   <select
     [value]="filterRoute()"
-    (change)="filterRoute.set($any($event.target).value)"
+    (change)="filterRoute.set($any($event.target).value); currentPage.set(1)"
     class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
   >
     <option value="">All Routes</option>
@@ -55,7 +55,7 @@
   </select>
   <select
     [value]="filterDriver()"
-    (change)="filterDriver.set($any($event.target).value)"
+    (change)="filterDriver.set($any($event.target).value); currentPage.set(1)"
     class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
   >
     <option value="">All Drivers</option>
@@ -65,7 +65,7 @@
   </select>
   <select
     [value]="filterConductor()"
-    (change)="filterConductor.set($any($event.target).value)"
+    (change)="filterConductor.set($any($event.target).value); currentPage.set(1)"
     class="text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] bg-white text-gray-600"
   >
     <option value="">All Conductors</option>
@@ -147,7 +147,7 @@
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
-        @for (trip of filtered(); track trip.id) {
+        @for (trip of pagedTrips(); track trip.id) {
           <tr class="hover:bg-gray-50 transition-colors">
             <td class="px-5 py-3 font-medium text-gray-800">{{ trip.trip_number }}</td>
             <td class="px-5 py-3 text-gray-600">
@@ -268,6 +268,18 @@
       </tbody>
     </table>
     </div>
+    <app-table-pagination
+      [currentPage]="currentPage()"
+      [totalPages]="totalPages()"
+      [totalItems]="totalItems()"
+      [pageSize]="pageSize()"
+      [pageStart]="pageStart()"
+      [pageEnd]="pageEnd()"
+      [pageNumbers]="pageNumbers()"
+      [pageSizes]="PAGE_SIZES"
+      (pageChange)="setPage($event)"
+      (pageSizeChange)="onPageSizeChange($event)"
+    />
   }
 </div>
 
@@ -390,7 +402,7 @@
           <div class="grid grid-cols-[1.5rem_minmax(0,1fr)_2rem] sm:grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)_2rem] gap-x-2 gap-y-1 px-1 mb-1">
             <span class="text-[10px] font-semibold text-gray-400 uppercase">#</span>
             <span class="text-[10px] font-semibold text-gray-400 uppercase">Route</span>
-            <span class="col-start-2 row-start-2 sm:col-auto sm:row-auto text-[10px] font-semibold text-gray-400 uppercase">Departure date & time</span>
+            <span class="col-start-2 row-start-2 sm:col-auto sm:row-auto text-[10px] font-semibold text-gray-400 uppercase">Departure date &amp; time</span>
             <span class="hidden sm:block"></span>
           </div>
 
@@ -413,11 +425,12 @@
                   }
                 </select>
 
-                <!-- Departure time -->
+                <!-- Departure date -->
                 <input
                   type="datetime-local"
                   [value]="row.departure_time"
                   (change)="updateRowTime($index, $event)"
+                  [min]="minScheduleDateTime"
                   [max]="maxScheduleDateTime"
                   class="col-start-2 row-start-2 sm:col-auto sm:row-auto min-w-0 w-full border border-gray-300 rounded-lg px-2 py-2 text-xs sm:text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20"
                   [class.border-red-400]="!row.departure_time"

@@ -29,6 +29,17 @@ export class FareSettings implements OnInit {
 
   private readonly API = `${environment.apiUrl}/api/fare-settings`;
 
+  get minEffectiveDate(): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+    return `${value('year')}-${value('month')}-${value('day')}`;
+  }
+
   loading = signal(false);
   saving = signal(false);
   settings = signal<FareSettingsData | null>(null);
@@ -52,7 +63,7 @@ export class FareSettings implements OnInit {
       [Validators.required, Validators.min(0), Validators.max(100)],
     ],
     pwd_discount_percent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
-    effective_date: [new Date().toISOString().slice(0, 10), Validators.required],
+    effective_date: [this.minEffectiveDate, Validators.required],
   });
 
   ngOnInit(): void {

@@ -94,6 +94,12 @@ export class DriverRemittancesPage implements OnInit {
     return Number(r.net_collection) + Number(r.cash_deposit);
   }
 
+  expenseAmount(remittance: Remittance, type: string): number {
+    return remittance.RemittanceExpenses
+      .filter((expense) => expense.expense_type === type)
+      .reduce((sum, expense) => sum + Number(expense.amount), 0);
+  }
+
   filtered = computed(() => {
     const q = this.search().toLowerCase().trim();
     const status = this.statusFilter();

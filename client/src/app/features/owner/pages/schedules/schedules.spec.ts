@@ -48,6 +48,39 @@ describe('Schedules', () => {
     expect(component.conductors().map((user) => user.id)).toEqual([4]);
   });
 
+  it('updates a schedule row with a date and departure time', () => {
+    component.tripRows.set([{ route_id: 40, departure_time: '2026-11-07T06:00' }]);
+
+    component.updateRowTime(0, { target: { value: '2026-11-08T07:30' } } as unknown as Event);
+
+    expect(component.tripRows()[0].departure_time).toBe('2026-11-08T07:30');
+    expect(component.scheduleDate()).toBe('2026-11-08');
+  });
+
+  it('does not allow scheduling before today', () => {
+    expect(component.isDepartureAllowed('2000-01-01T23:59')).toBe(false);
+    expect(component.isDepartureAllowed(`${component.minScheduleDateTime}`)).toBe(true);
+  });
+
+  it('only includes active buses and crew in schedule filters', () => {
+    component.buses.set([
+      { id: 10, bus_number: 'ACTIVE', plate_number: 'A', status: 'active' },
+      { id: 11, bus_number: 'INACTIVE', plate_number: 'I', status: 'inactive' },
+    ]);
+    component.filterDrivers.set([
+      { id: 2, role: 'driver', first_name: 'Active', last_name: 'Driver', is_active: true },
+      { id: 3, role: 'driver', first_name: 'Inactive', last_name: 'Driver', is_active: false },
+    ]);
+    component.filterConductors.set([
+      { id: 4, role: 'conductor', first_name: 'Active', last_name: 'Conductor', is_active: true },
+      { id: 5, role: 'conductor', first_name: 'Inactive', last_name: 'Conductor', is_active: false },
+    ]);
+
+    expect(component.activeBuses().map((bus) => bus.id)).toEqual([10]);
+    expect(component.tripDrivers().map((driver) => driver.id)).toEqual([2]);
+    expect(component.tripConductors().map((conductor) => conductor.id)).toEqual([4]);
+  });
+
   it('keeps schedule filters applied when the date range reloads', () => {
     const trip: ScheduleTrip = {
       id: 1,

@@ -160,6 +160,18 @@
             <span>-{{ remittance()!.total_less | currency: 'PHP' }}</span>
           </div>
           <div class="pl-3 space-y-1.5 border-l-2 border-amber-100 text-xs">
+            @if (expenseAmount('miscellaneous') > 0) {
+              <div class="flex justify-between">
+                <span class="text-gray-400">Miscellaneous Fee</span>
+                <span class="text-amber-600">-{{ expenseAmount('miscellaneous') | currency: 'PHP' }}</span>
+              </div>
+            }
+            @if (expenseAmount('diesel') > 0) {
+              <div class="flex justify-between">
+                <span class="text-gray-400">Half of Diesel</span>
+                <span class="text-amber-600">-{{ expenseAmount('diesel') / 2 | currency: 'PHP' }}</span>
+              </div>
+            }
             <div class="flex justify-between">
               <span class="text-gray-400">Driver Commission</span>
               <span class="text-amber-600"
@@ -180,18 +192,22 @@
                 >
               </div>
             }
-            @if (+remittance()!.other_deductions > 0) {
-              <div class="flex justify-between">
-                <span class="text-gray-400">Other Deductions</span>
-                <span class="text-amber-600"
-                  >-{{ remittance()!.other_deductions | currency: 'PHP' }}</span
-                >
-              </div>
-            }
             <div class="flex justify-between">
               <span class="text-gray-400">Cash Deposit</span>
               <span class="text-amber-600"
                 >-{{ remittance()!.cash_deposit | currency: 'PHP' }}</span
+              >
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-400">Driver Share</span>
+              <span class="text-amber-600"
+                >-{{ remittance()!.driver_officer_share | currency: 'PHP' }}</span
+              >
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-400">Conductor Share</span>
+              <span class="text-amber-600"
+                >-{{ remittance()!.conductor_officer_share | currency: 'PHP' }}</span
               >
             </div>
           </div>

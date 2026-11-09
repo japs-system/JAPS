@@ -109,6 +109,12 @@ export class RemittanceReviewPage implements OnInit {
     return c !== null && expected > 0 && c > expected * 2;
   });
 
+  expenseAmount(type: string): number {
+    return (this.remittance()?.RemittanceExpenses ?? [])
+      .filter((expense) => expense.expense_type === type)
+      .reduce((sum, expense) => sum + Number(expense.amount), 0);
+  }
+
   /** Reject non-numeric values and values outside the supported cash range. */
   cashInvalid = computed(() => {
     const c = this.cashReceived();

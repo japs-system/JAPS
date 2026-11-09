@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { AlertService } from '../../../../core/services/alert.service';
 import { environment } from '../../../../../environments/environment';
+import { TablePagination } from '../../../../shared/components/table-pagination/table-pagination';
 
 export interface ScheduleTrip {
   id: number;
@@ -46,12 +47,12 @@ export interface ScheduleRoute {
 // A single trip row in the multi-trip builder
 export interface TripRow {
   route_id: number | null;
-  departure_time: string; // datetime-local string
+  departure_time: string; // Internal timestamp; the form exposes only its date.
 }
 
 @Component({
   selector: 'app-schedules',
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, TablePagination],
   templateUrl: './schedules.html',
 })
 export class Schedules implements OnInit {
@@ -113,6 +114,9 @@ export class Schedules implements OnInit {
   filterDriver = signal('');
   filterConductor = signal('');
   filterRoute = signal('');
+  pageSize = signal(10);
+  currentPage = signal(1);
+  readonly PAGE_SIZES = [10, 25, 50];
 
   filtered = computed(() => {
     const bus = this.filterBus();
@@ -130,13 +134,34 @@ export class Schedules implements OnInit {
       .sort((a, b) => b.id - a.id); // newest added first
   });
 
+  totalItems = computed(() => this.filtered().length);
+  totalPages = computed(() => Math.max(1, Math.ceil(this.totalItems() / this.pageSize())));
+  pageStart = computed(() =>
+    this.totalItems() === 0 ? 0 : (this.currentPage() - 1) * this.pageSize() + 1,
+  );
+  pageEnd = computed(() => Math.min(this.currentPage() * this.pageSize(), this.totalItems()));
+  pagedTrips = computed(() => {
+    const start = (this.currentPage() - 1) * this.pageSize();
+    return this.filtered().slice(start, start + this.pageSize());
+  });
+  pageNumbers = computed(() => {
+    const total = this.totalPages();
+    const current = this.currentPage();
+    const pages: (number | '...')[] = [];
+    for (let page = 1; page <= total; page++) {
+      if (page === 1 || page === total || Math.abs(page - current) <= 1) pages.push(page);
+      else if (pages[pages.length - 1] !== '...') pages.push('...');
+    }
+    return pages;
+  });
+
   tripDrivers = computed(() => {
-    const people = new Map(this.filterDrivers().map((user) => [
+    const people = new Map(this.filterDrivers().filter((user) => user.is_active).map((user) => [
       user.id,
       `${user.first_name} ${user.last_name}`,
     ]));
     for (const trip of this.allTrips()) {
-      if (trip.driver && !people.has(trip.driver_id)) {
+      if (trip.driver?.is_active !== false && trip.driver && !people.has(trip.driver_id)) {
         people.set(trip.driver_id, `${trip.driver.first_name} ${trip.driver.last_name}`);
       }
     }
@@ -144,12 +169,16 @@ export class Schedules implements OnInit {
   });
 
   tripConductors = computed(() => {
-    const people = new Map(this.filterConductors().map((user) => [
+    const people = new Map(this.filterConductors().filter((user) => user.is_active).map((user) => [
       user.id,
       `${user.first_name} ${user.last_name}`,
     ]));
     for (const trip of this.allTrips()) {
-      if (trip.conductor && !people.has(trip.conductor_id)) {
+      if (
+        trip.conductor?.is_active !== false &&
+        trip.conductor &&
+        !people.has(trip.conductor_id)
+      ) {
         people.set(trip.conductor_id, `${trip.conductor.first_name} ${trip.conductor.last_name}`);
       }
     }
@@ -190,14 +219,23 @@ export class Schedules implements OnInit {
     return `${value('year')}-${value('month')}-${value('day')}T${value('hour')}:${value('minute')}`;
   }
 
-  get maxScheduleDateTime(): string {
+  get maxScheduleDate(): string {
     const currentYear = Number(this.today().slice(0, 4));
     const maxYear = (Math.floor(currentYear / 5) + 1) * 5;
-    return `${maxYear}-12-31T23:59`;
+    return `${maxYear}-12-31`;
+  }
+
+  get minScheduleDateTime(): string {
+    return `${this.today()}T00:00`;
+  }
+
+  get maxScheduleDateTime(): string {
+    return `${this.maxScheduleDate}T23:59`;
   }
 
   isDepartureAllowed(value: string): boolean {
-    return !!value && value <= this.maxScheduleDateTime;
+    const date = value.slice(0, 10);
+    return !!value && date >= this.today() && date <= this.maxScheduleDate;
   }
 
   /** First day of the current month (YYYY-MM-DD) in Manila time. */
@@ -229,6 +267,7 @@ export class Schedules implements OnInit {
     this.http.get<ScheduleTrip[]>(url, { withCredentials: true }).subscribe({
       next: (data) => {
         this.allTrips.set(data);
+        this.currentPage.set(Math.min(this.currentPage(), this.totalPages()));
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -239,6 +278,7 @@ export class Schedules implements OnInit {
     const v = (e.target as HTMLInputElement).value;
     this.startDate.set(v);
     if (this.endDate() < v) this.endDate.set(v);
+    this.currentPage.set(1);
     this.loadTrips();
   }
 
@@ -246,6 +286,7 @@ export class Schedules implements OnInit {
     const v = (e.target as HTMLInputElement).value;
     this.endDate.set(v);
     if (this.startDate() > v) this.startDate.set(v);
+    this.currentPage.set(1);
     this.loadTrips();
   }
 
@@ -262,8 +303,8 @@ export class Schedules implements OnInit {
         next: (data) => {
           this.drivers.set(data.filter((user) => user.role === 'driver' && user.is_active));
           this.conductors.set(data.filter((user) => user.role === 'conductor' && user.is_active));
-          this.filterDrivers.set(data.filter((user) => user.role === 'driver'));
-          this.filterConductors.set(data.filter((user) => user.role === 'conductor'));
+          this.filterDrivers.set(data.filter((user) => user.role === 'driver' && user.is_active));
+          this.filterConductors.set(data.filter((user) => user.role === 'conductor' && user.is_active));
         },
       error: (err) =>
         this.alertService.error('Error', err.error?.message ?? 'Could not load active crew.'),
@@ -370,6 +411,16 @@ export class Schedules implements OnInit {
     this.tripRows.update((rows) =>
       rows.map((r, i) => (i === index ? { ...r, departure_time: val } : r)),
     );
+    if (index === 0) this.scheduleDate.set(val.slice(0, 10));
+  }
+
+  setPage(page: number): void {
+    this.currentPage.set(page);
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pageSize.set(size);
+    this.currentPage.set(1);
   }
 
   canSave(): boolean {
@@ -401,21 +452,14 @@ export class Schedules implements OnInit {
       return;
     }
     if (!this.tripRows().every((r) => !!r.route_id && !!r.departure_time && !Number.isNaN(new Date(r.departure_time).getTime()))) {
-      this.alertService.error('Error', 'Please select a valid route, date, and departure time for every trip.');
+      this.alertService.error('Error', 'Please select a valid route and departure date for every trip.');
       return;
     }
     if (!this.tripRows().every((row) => this.isDepartureAllowed(row.departure_time))) {
       this.alertService.error(
-        'Invalid departure time',
-        `Schedule departures must be on or before December 31, ${this.maxScheduleDateTime.slice(0, 4)}.`,
+        'Invalid departure date',
+        `Schedule departures must be on or before ${this.maxScheduleDate}.`,
       );
-      return;
-    }
-
-    // Prevent duplicate departure slots for the same bus within this batch.
-    const departureSlots = this.tripRows().map((r) => r.departure_time.slice(0, 16));
-    if (new Set(departureSlots).size !== departureSlots.length) {
-      this.alertService.error('Duplicate schedule', 'This bus cannot have multiple trips at the same date and time. Please choose a different departure time.');
       return;
     }
 

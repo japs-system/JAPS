@@ -331,6 +331,18 @@
               <span class="text-amber-600">-{{ selected()!.total_less | currency: 'PHP' }}</span>
             </div>
             <div class="ml-1 pl-3 border-l-2 border-amber-200 space-y-1.5 text-xs">
+              @if (expenseAmount(selected()!, 'miscellaneous') > 0) {
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Miscellaneous Fee</span>
+                  <span class="text-amber-600">-{{ expenseAmount(selected()!, 'miscellaneous') | currency: 'PHP' }}</span>
+                </div>
+              }
+              @if (expenseAmount(selected()!, 'diesel') > 0) {
+                <div class="flex justify-between">
+                  <span class="text-gray-400">Half of Diesel</span>
+                  <span class="text-amber-600">-{{ expenseAmount(selected()!, 'diesel') / 2 | currency: 'PHP' }}</span>
+                </div>
+              }
               <div class="flex justify-between">
                 <span class="text-gray-400">Driver Commission</span>
                 <span class="text-amber-600"
@@ -351,18 +363,22 @@
                   >
                 </div>
               }
-              @if (+selected()!.other_deductions > 0) {
-                <div class="flex justify-between">
-                  <span class="text-gray-400">Other Deductions</span>
-                  <span class="text-amber-600"
-                    >-{{ selected()!.other_deductions | currency: 'PHP' }}</span
-                  >
-                </div>
-              }
               <div class="flex justify-between">
                 <span class="text-gray-400">Cash Deposit</span>
                 <span class="text-amber-600"
                   >-{{ selected()!.cash_deposit | currency: 'PHP' }}</span
+                >
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Driver Share</span>
+                <span class="text-amber-600"
+                  >-{{ selected()!.driver_officer_share | currency: 'PHP' }}</span
+                >
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-400">Conductor Share</span>
+                <span class="text-amber-600"
+                  >-{{ selected()!.conductor_officer_share | currency: 'PHP' }}</span
                 >
               </div>
             </div>

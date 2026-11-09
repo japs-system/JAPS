@@ -30,6 +30,8 @@ const {
   notifyOwners,
   notifyRoles,
 } = require("../services/notificationService");
+const { calculateTotalLess } = require("../utils/remittanceCalculations");
+const { toManualTicketRow } = require("../utils/manualTicket");
 
 // Fire-and-forget wrapper: a failed email/notification must never break the real action.
 const notify = (promise) => promise.catch((err) => console.error("Notification failed:", err));
@@ -661,7 +663,39 @@ const getTickets = async (req, res) => {
       order: [["issued_at", "DESC"]],
     });
 
-    return res.json(tickets);
+    const manualTrips = await Trip.findAll({
+      where: {
+        conductor_id: conductorId,
+        status: "completed",
+        ticket_number_start: { [Op.not]: null },
+        ticket_number_end: { [Op.not]: null },
+        ...(tripId ? { id: tripId } : {}),
+      },
+      include: [
+        { model: Ticket, attributes: ["id"], required: false },
+        { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
+        { model: Route, attributes: ["id", "origin", "destination", "distance_km"] },
+        {
+          model: User,
+          as: "driver",
+          attributes: ["id", "first_name", "last_name", "employee_id"],
+        },
+        {
+          model: User,
+          as: "conductor",
+          attributes: ["id", "first_name", "last_name", "employee_id"],
+        },
+      ],
+      order: [["updatedAt", "DESC"]],
+    });
+
+    const manualTicketRows = manualTrips
+      .filter((trip) => (trip.Tickets?.length ?? 0) === 0)
+      .map(toManualTicketRow);
+
+    return res.json([...tickets, ...manualTicketRows].sort(
+      (a, b) => new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime(),
+    ));
   } catch (error) {
     console.error("Error fetching tickets:", error);
     return res.status(500).json({ message: "Internal server error." });
@@ -685,7 +719,12 @@ const applyManualTripEntries = async (trips, manualTrips, transaction) => {
     if (!Number.isFinite(collection) || collection < 0) {
       return `Enter a valid cash collection for trip #${trip.trip_number}.`;
     }
-    const counts = Array.isArray(entry.passenger_counts) ? entry.passenger_counts : [];
+    const totalPassengers = Number(entry.total_passengers);
+    if (!Number.isInteger(totalPassengers) || totalPassengers < 1 || totalPassengers > 9999) {
+      return `Total passengers for trip #${trip.trip_number} must be from 1 to 9,999.`;
+    }
+    const hasPassengerCounts = Array.isArray(entry.passenger_counts);
+    const counts = hasPassengerCounts ? entry.passenger_counts : [];
     for (const c of counts) {
       if (!PASSENGER_CATEGORIES.includes(c?.category)) {
         return `Invalid passenger category on trip #${trip.trip_number}.`;
@@ -704,19 +743,23 @@ const applyManualTripEntries = async (trips, manualTrips, transaction) => {
       return `Trip #${trip.trip_number} can't arrive before it departed.`;
     }
 
-    await PassengerCount.destroy({ where: { trip_id: trip.id }, transaction });
-    for (const c of counts) {
-      if (Number(c.count) > 0) {
-        await PassengerCount.create(
-          { trip_id: trip.id, category: c.category, count: Number(c.count) },
-          { transaction },
-        );
+    if (hasPassengerCounts) {
+      await PassengerCount.destroy({ where: { trip_id: trip.id }, transaction });
+      for (const c of counts) {
+        if (Number(c.count) > 0) {
+          await PassengerCount.create(
+            { trip_id: trip.id, category: c.category, count: Number(c.count) },
+            { transaction },
+          );
+        }
       }
     }
 
     await trip.update(
       {
         grand_total: collection,
+        ticket_number_start: "1",
+        ticket_number_end: String(totalPassengers),
         status: "completed",
         actual_departure_time:
           departed ?? trip.actual_departure_time ?? trip.departure_time,
@@ -730,8 +773,8 @@ const applyManualTripEntries = async (trips, manualTrips, transaction) => {
 
 // POST /api/conductor/remittances
 // Submit expenses and operational reports. Trips run without the ticketing terminal can
-// be included with `manual_trips: [{ trip_id, passenger_counts: [{ category, count }],
-// collection, actual_departure_time?, arrival_time? }]`; logged TripExpense entries the
+// be included with `manual_trips: [{ trip_id, collection, passenger_counts?,
+// actual_departure_time?, arrival_time? }]`; logged TripExpense entries the
 // remittance covers are passed as `expense_ids` and get linked to it.
 const submitRemittance = async (req, res) => {
   const transaction = await sequelize.transaction();
@@ -835,12 +878,15 @@ const submitRemittance = async (req, res) => {
     );
     const netGross = grossIncome - totalExpenses;
 
-    const totalLess =
-      Number(driver_commission) +
-      Number(conductor_commission) +
-      Number(bonus_allowance) +
-      Number(other_deductions) +
-      Number(cash_deposit);
+    const totalLess = calculateTotalLess({
+      expenses,
+      driver_commission,
+      conductor_commission,
+      bonus_allowance,
+      cash_deposit,
+      driver_officer_share,
+      conductor_officer_share,
+    });
 
     const netCollection = netGross - totalLess;
 
@@ -980,12 +1026,7 @@ const resubmitRemittance = async (req, res) => {
 
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
     const netGross = Number(remittance.gross_income) - totalExpenses;
-    const totalLess =
-      amounts.driver_commission +
-      amounts.conductor_commission +
-      amounts.bonus_allowance +
-      amounts.other_deductions +
-      amounts.cash_deposit;
+    const totalLess = calculateTotalLess({ expenses, ...amounts });
     const netCollection = netGross - totalLess;
 
     await remittance.update(

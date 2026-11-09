@@ -11,7 +11,6 @@ import {
   RemittanceTicket,
 } from '../../../../shared/components/remittance-trips-table/remittance-trips-table';
 import { expenseTypeLabel } from '../../../../shared/constants/expense-types';
-import { passengerCategoryLabel } from '../../../../shared/models/ticket.models';
 
 interface Remittance {
   id: number;
@@ -75,13 +74,9 @@ interface Trip {
 
 /** Results typed in by hand for a trip that ran without the ticketing terminal. */
 interface ManualTripEntry {
-  counts: Record<string, number>;
+  totalPassengers: number;
   collection: number;
-  departure: string; // datetime-local, optional
-  arrival: string; // datetime-local, optional
 }
-
-const MANUAL_CATEGORIES = ['regular', 'student', 'senior_citizen'];
 
 // Remittance form control for each expense type.
 const EXPENSE_CONTROLS: Record<string, string> = {
@@ -112,18 +107,17 @@ const EXPENSE_FIELDS = [
 const sumExpenseFields = (f: any): number =>
   EXPENSE_FIELDS.reduce((sum, field) => sum + Number(f?.[field.ctrl] || 0), 0);
 
-const sumLessFields = (f: any): number =>
-  Number(f?.driver_commission || 0) +
-  Number(f?.conductor_commission || 0) +
-  Number(f?.bonus_allowance || 0) +
-  Number(f?.other_deductions || 0) +
-  Number(f?.cash_deposit || 0);
-
-/** datetime-local value (YYYY-MM-DDTHH:mm) in the browser's local time. */
-const toDateTimeLocal = (d: string | Date): string => {
-  const date = new Date(d);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+const sumLessFields = (f: any): number => {
+  const total =
+    Number(f?.exp_miscellaneous || 0) +
+    Number(f?.exp_diesel || 0) / 2 +
+    Number(f?.driver_commission || 0) +
+    Number(f?.conductor_commission || 0) +
+    Number(f?.bonus_allowance || 0) +
+    Number(f?.cash_deposit || 0) +
+    Number(f?.driver_officer_share || 0) +
+    Number(f?.conductor_officer_share || 0);
+  return Math.round((total + Number.EPSILON) * 100) / 100;
 };
 
 const manilaDateString = (date: Date): string => {
@@ -181,7 +175,6 @@ export class ConductorRemittancesPage implements OnInit {
   formValues = signal<any>({});
   remittanceForm: FormGroup;
 
-  readonly MANUAL_CATEGORIES = MANUAL_CATEGORIES;
   // Manually encoded results, keyed by trip id (only for trips without tickets).
   manualEntries = signal<Record<number, ManualTripEntry>>({});
 
@@ -464,8 +457,13 @@ export class ConductorRemittancesPage implements OnInit {
     return expenseTypeLabel(type);
   }
 
-  categoryLabel(category: string): string {
-    return passengerCategoryLabel(category);
+  expenseAmount(
+    expenses: { expense_type: string; amount: number }[],
+    type: string,
+  ): number {
+    return expenses
+      .filter((expense) => expense.expense_type === type)
+      .reduce((sum, expense) => sum + Number(expense.amount), 0);
   }
 
   // ── Submit methods ──
@@ -559,21 +557,14 @@ export class ConductorRemittancesPage implements OnInit {
       : Number(t.grand_total);
   }
 
-  manualPassengerTotal(tripId: number): number {
-    const entry = this.manualEntries()[tripId];
-    return entry ? Object.values(entry.counts).reduce((sum, n) => sum + Number(n || 0), 0) : 0;
-  }
-
   /** Every selected manual trip gets an entry, starting at zero. */
   private ensureManualEntries(): void {
     const entries = { ...this.manualEntries() };
     for (const t of this.selectedTrips()) {
       if (this.isManual(t) && !entries[t.id]) {
         entries[t.id] = {
-          counts: Object.fromEntries(MANUAL_CATEGORIES.map((c) => [c, 0])),
+          totalPassengers: 0,
           collection: 0,
-          departure: '',
-          arrival: '',
         };
       }
     }
@@ -591,10 +582,9 @@ export class ConductorRemittancesPage implements OnInit {
     return text;
   }
 
-  /** Passengers per category: whole numbers, 2 digits at most (0–99). */
-  updateManualCount(tripId: number, category: string, e: Event): void {
-    const value = Number(this.cleanNumberInput(e, 2)) || 0;
-    this.patchManual(tripId, (m) => ({ ...m, counts: { ...m.counts, [category]: value } }));
+  updateManualPassengerCount(tripId: number, e: Event): void {
+    const value = Number(this.cleanNumberInput(e, 4)) || 0;
+    this.patchManual(tripId, (m) => ({ ...m, totalPassengers: value }));
   }
 
   /** Cash collected: 6 digits at most before the decimal point (up to ₱999,999.99). */
@@ -604,19 +594,10 @@ export class ConductorRemittancesPage implements OnInit {
     this.autoCalculateCommissions();
   }
 
-  updateManualTime(tripId: number, field: 'departure' | 'arrival', e: Event): void {
-    const value = (e.target as HTMLInputElement).value;
-    this.patchManual(tripId, (m) => ({ ...m, [field]: value }));
-  }
-
   private patchManual(tripId: number, fn: (m: ManualTripEntry) => ManualTripEntry): void {
     const current = this.manualEntries()[tripId];
     if (!current) return;
     this.manualEntries.set({ ...this.manualEntries(), [tripId]: fn(current) });
-  }
-
-  scheduledTimeLocal(t: Trip): string {
-    return toDateTimeLocal(t.departure_time);
   }
 
   isSelected(id: number): boolean {
@@ -662,14 +643,7 @@ export class ConductorRemittancesPage implements OnInit {
   netGross = computed(() => this.grossIncome() - this.totalExpenses());
 
   totalLess = computed(() => {
-    const f = this.formValues();
-    return (
-      Number(f.driver_commission || 0) +
-      Number(f.conductor_commission || 0) +
-      Number(f.bonus_allowance || 0) +
-      Number(f.other_deductions || 0) +
-      Number(f.cash_deposit || 0)
-    );
+    return sumLessFields(this.formValues());
   });
 
   netCollection = computed(() => this.netGross() - this.totalLess());
@@ -702,6 +676,20 @@ export class ConductorRemittancesPage implements OnInit {
       this.alertService.error('Submit Failed', 'Select at least one trip to remit.');
       return;
     }
+    const invalidManualTrip = trips.find(
+      (trip) =>
+        this.isManual(trip) &&
+        (!Number.isInteger(this.manualEntries()[trip.id]?.totalPassengers) ||
+          this.manualEntries()[trip.id].totalPassengers < 1 ||
+          this.manualEntries()[trip.id].totalPassengers > 9999),
+    );
+    if (invalidManualTrip) {
+      this.alertService.error(
+        'Submit Failed',
+        `Enter a total passenger count from 1 to 9,999 for trip #${invalidManualTrip.trip_number}.`,
+      );
+      return;
+    }
     const bus = this.selectedBus()!;
     const firstTrip = trips[0];
     const manual_trips = trips
@@ -710,13 +698,8 @@ export class ConductorRemittancesPage implements OnInit {
         const m = this.manualEntries()[t.id];
         return {
           trip_id: t.id,
+          total_passengers: Number(m?.totalPassengers ?? 0),
           collection: Number(m?.collection ?? 0),
-          passenger_counts: MANUAL_CATEGORIES.map((category) => ({
-            category,
-            count: Number(m?.counts[category] ?? 0),
-          })),
-          actual_departure_time: m?.departure ? new Date(m.departure).toISOString() : null,
-          arrival_time: m?.arrival ? new Date(m.arrival).toISOString() : null,
         };
       });
     this.isSubmitting.set(true);
