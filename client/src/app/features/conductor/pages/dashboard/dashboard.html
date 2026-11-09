@@ -209,7 +209,7 @@
                 <p class="text-xs text-gray-400 flex items-center gap-1.5 py-1">
                   <i class="pi pi-lock text-xs"></i>
                   {{
-                    hasOngoingToday()
+                    hasOngoingTrip()
                       ? 'Mark your ongoing trip as done first.'
                       : 'Complete the previous trip first.'
                   }}
@@ -389,7 +389,7 @@
                         [disabled]="updatingId() === trip.id || !canStartTrip().get(trip.id)"
                         [title]="
                           !canStartTrip().get(trip.id)
-                            ? hasOngoingToday()
+                            ? hasOngoingTrip()
                               ? 'Mark your ongoing trip as done first'
                               : 'Complete the previous trip first'
                             : 'Start trip'

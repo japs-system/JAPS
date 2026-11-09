@@ -126,6 +126,17 @@ const toDateTimeLocal = (d: string | Date): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+const manilaDateString = (date: Date): string => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
+};
+
 type SortField = 'date' | 'submitted_at' | 'net_collection' | 'total_revenue' | 'status';
 type Tab = 'list' | 'submit';
 
@@ -160,7 +171,7 @@ export class ConductorRemittancesPage implements OnInit {
   readonly PAGE_SIZES = [10, 25, 50];
 
   // ── Submit state ──
-  selectedDate = signal<string>(new Date().toISOString().split('T')[0]);
+  selectedDate = signal<string>(manilaDateString(new Date()));
   selectedBus = signal<any | null>(null);
   allTrips = signal<Trip[]>([]);
   selectedTripIds = signal<Set<number>>(new Set());

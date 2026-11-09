@@ -21,6 +21,11 @@ const {
 
 const { findRemittanceDetail } = require("../services/remittance/findRemittanceDetail");
 const {
+  isValidDateKey,
+  manilaDateKey,
+  manilaDayBounds,
+} = require("../utils/manilaTime");
+const {
   createNotification,
   notifyOwners,
   notifyRoles,
@@ -132,6 +137,10 @@ const getAssignedTrips = async (req, res) => {
 
     // If date + busId provided, return unremitted trips for that bus/date
     if (date && busId) {
+      if (!isValidDateKey(date)) {
+        return res.status(400).json({ message: "Provide a valid date in YYYY-MM-DD format." });
+      }
+      const { start, endExclusive } = manilaDayBounds(date);
       const trips = await Trip.findAll({
         attributes: {
           include: [
@@ -149,10 +158,8 @@ const getAssignedTrips = async (req, res) => {
           status: "completed",
           remittance_id: null,
           departure_time: {
-            [Op.gte]: new Date(date + "T00:00:00"),
-            [Op.lt]: new Date(
-              new Date(date).getTime() + 24 * 60 * 60 * 1000,
-            ).toISOString(),
+            [Op.gte]: start,
+            [Op.lt]: endExclusive,
           },
         },
         include: [
@@ -241,37 +248,20 @@ const updateTripStatus = async (req, res) => {
     const updateData = { status };
     if (status === "ongoing") {
       updateData.actual_departure_time = new Date();
-      // Enforce that the trip's scheduled date matches today
-      if (trip.departure_time) {
-        const tripDate = new Date(trip.departure_time);
-        const today = new Date();
-        const isSameDay =
-          tripDate.getFullYear() === today.getFullYear() &&
-          tripDate.getMonth() === today.getMonth() &&
-          tripDate.getDate() === today.getDate();
-        if (!isSameDay) {
-          return res.status(400).json({
-            message: `This trip is scheduled for ${tripDate.toDateString()} and cannot be started today.`,
-          });
-        }
-      } else {
-        // No departure_time yet — set it now (today's trip)
-        updateData.departure_time = new Date();
+      const tripDateKey = trip.departure_time
+        ? manilaDateKey(trip.departure_time)
+        : null;
+      const tripDate = tripDateKey ? manilaDayBounds(tripDateKey) : null;
+      if (!tripDate) {
+        return res.status(400).json({ message: "Trip has no valid scheduled departure date." });
       }
 
-      const today = new Date();
-      const dayStart = new Date(today);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(today);
-      dayEnd.setHours(23, 59, 59, 999);
-
-      // Only one trip at a time: the conductor must finish the ongoing trip first
+      // Only one trip at a time: the conductor must finish the ongoing trip first.
       const ongoingTrip = await Trip.findOne({
         where: {
           conductor_id: conductorId,
           status: "ongoing",
           id: { [Op.ne]: trip.id },
-          departure_time: { [Op.between]: [dayStart, dayEnd] },
         },
       });
       if (ongoingTrip) {
@@ -280,15 +270,13 @@ const updateTripStatus = async (req, res) => {
         });
       }
 
-      // Enforce sequential order: no earlier scheduled trip on the same bus today
-
       const blockers = await Trip.findAll({
         where: {
           bus_id: trip.bus_id,
           conductor_id: conductorId,
           trip_number: { [Op.lt]: trip.trip_number },
           status: "scheduled",
-          departure_time: { [Op.between]: [dayStart, dayEnd] },
+          departure_time: { [Op.gte]: tripDate.start, [Op.lt]: tripDate.endExclusive },
         },
       });
 
@@ -771,6 +759,11 @@ const submitRemittance = async (req, res) => {
         .status(400)
         .json({ message: "Missing required remittance fields." });
     }
+    if (!isValidDateKey(date)) {
+      await transaction.rollback();
+      return res.status(400).json({ message: "Provide a valid remittance date." });
+    }
+    const remittanceDay = manilaDayBounds(date);
 
     const isValidAmount = isValidRemittanceAmount;
     const amountsOk = [
@@ -795,15 +788,18 @@ const submitRemittance = async (req, res) => {
       where: {
         id: { [Op.in]: trip_ids },
         conductor_id: conductorId,
+        bus_id,
+        remittance_id: null,
+        departure_time: { [Op.gte]: remittanceDay.start, [Op.lt]: remittanceDay.endExclusive },
       },
       transaction,
     });
 
-    if (trips.length === 0) {
+    if (trips.length !== trip_ids.length) {
       await transaction.rollback();
       return res
-        .status(404)
-        .json({ message: "No valid trips found for remittance." });
+        .status(400)
+        .json({ message: "Selected trips must be completed, unremitted trips for the selected bus and date." });
     }
 
     const manualError = await applyManualTripEntries(

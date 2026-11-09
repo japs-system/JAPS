@@ -117,6 +117,39 @@ describe('Schedules', () => {
       .flush([]);
   });
 
+  it('prefills the current assignments when editing a trip with inactive resources', () => {
+    const inactiveBus = {
+      id: 11,
+      bus_number: 'BUS-11',
+      plate_number: 'ABC-011',
+      status: 'inactive' as const,
+    };
+    const trip: ScheduleTrip = {
+      id: 101,
+      bus_id: inactiveBus.id,
+      driver_id: 12,
+      conductor_id: 13,
+      route_id: 40,
+      trip_number: 5,
+      departure_time: '2026-11-07T04:00:00.000Z',
+      actual_departure_time: null,
+      arrival_time: null,
+      status: 'scheduled',
+      BusModel: inactiveBus,
+      driver: { id: 12, first_name: 'Old', last_name: 'Driver', is_active: false },
+      conductor: { id: 13, first_name: 'Old', last_name: 'Conductor', is_active: false },
+    };
+
+    component.buses.set([inactiveBus]);
+    component.openEdit(trip);
+
+    expect(component.selectedBus()?.id).toBe(inactiveBus.id);
+    expect(component.selectedDriverId()).toBe(12);
+    expect(component.selectedConductorId()).toBe(13);
+    expect(component.scheduleDrivers().map((user) => user.id)).toContain(12);
+    expect(component.scheduleConductors().map((user) => user.id)).toContain(13);
+  });
+
   it('cancels a scheduled trip and reloads the schedule list', () => {
     const trip: ScheduleTrip = {
       id: 99,

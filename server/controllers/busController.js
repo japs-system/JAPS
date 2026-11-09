@@ -199,17 +199,17 @@ const getTrips = async (req, res) => {
   const trips = await Trip.findAll({
     where: { departure_time: { [Op.gte]: start, [Op.lt]: endExclusive } },
     include: [
-      { model: BusInfo, attributes: ["id", "bus_number", "plate_number"] },
+      { model: BusInfo, attributes: ["id", "bus_number", "plate_number", "status"] },
       { model: Route, attributes: ["id", "origin", "destination"] },
       {
         model: User,
         as: "driver",
-        attributes: ["id", "first_name", "last_name"],
+        attributes: ["id", "first_name", "last_name", "is_active"],
       },
       {
         model: User,
         as: "conductor",
-        attributes: ["id", "first_name", "last_name"],
+        attributes: ["id", "first_name", "last_name", "is_active"],
       },
     ],
     order: [["departure_time", "ASC"]],
@@ -350,18 +350,26 @@ const notifyTripScheduleUpdated = async (before, after) => {
   }
 };
 
-const validateScheduleResources = async ({ bus_id, driver_id, conductor_id, route_id }) => {
+const validateScheduleResources = async ({ bus_id, driver_id, conductor_id, route_id, existingTrip }) => {
   const [bus, driver, conductor, route] = await Promise.all([
     BusInfo.findByPk(bus_id),
-    User.findOne({ where: { id: driver_id, role: "driver", is_active: true } }),
-    User.findOne({ where: { id: conductor_id, role: "conductor", is_active: true } }),
+    User.findOne({ where: { id: driver_id, role: "driver" } }),
+    User.findOne({ where: { id: conductor_id, role: "conductor" } }),
     route_id ? Route.findByPk(route_id) : null,
   ]);
-  if (!bus || bus.status !== "active") {
+  const isExistingBus = existingTrip && String(bus_id) === String(existingTrip.bus_id);
+  const isExistingDriver = existingTrip && String(driver_id) === String(existingTrip.driver_id);
+  const isExistingConductor =
+    existingTrip && String(conductor_id) === String(existingTrip.conductor_id);
+  if (!bus || (bus.status !== "active" && !isExistingBus)) {
     return { status: 400, message: "Select an active bus." };
   }
-  if (!driver) return { status: 400, message: "Select an active driver." };
-  if (!conductor) return { status: 400, message: "Select an active conductor." };
+  if (!driver || (!driver.is_active && !isExistingDriver)) {
+    return { status: 400, message: "Select an active driver." };
+  }
+  if (!conductor || (!conductor.is_active && !isExistingConductor)) {
+    return { status: 400, message: "Select an active conductor." };
+  }
   if (route_id && !route) return { status: 400, message: "Select a valid route." };
   return { bus, driver, conductor, route };
 };
@@ -419,7 +427,12 @@ const createTrip = async (req, res) => {
   const departureError = scheduleDepartureError(parsedDeparture);
   if (departureError) return res.status(400).json({ message: departureError });
 
-  const resources = await validateScheduleResources({ bus_id, driver_id, conductor_id, route_id });
+  const resources = await validateScheduleResources({
+    bus_id,
+    driver_id,
+    conductor_id,
+    route_id,
+  });
   if (resources.status) return res.status(resources.status).json({ message: resources.message });
 
   const conflict = await findScheduleConflict({ bus_id, driver_id, conductor_id, departure_time: parsedDeparture });
@@ -599,7 +612,13 @@ const updateTrip = async (req, res) => {
   const departureError = scheduleDepartureError(nextDeparture);
   if (departureError) return res.status(400).json({ message: departureError });
 
-  const resources = await validateScheduleResources({ bus_id, driver_id, conductor_id, route_id });
+  const resources = await validateScheduleResources({
+    bus_id,
+    driver_id,
+    conductor_id,
+    route_id,
+    existingTrip: trip,
+  });
   if (resources.status) return res.status(resources.status).json({ message: resources.message });
 
   const conflict = await findScheduleConflict({

@@ -320,8 +320,10 @@
             class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white"
           >
             <option value="">— Select Bus —</option>
-            @for (b of activeBuses(); track b.id) {
-              <option [value]="b.id">Bus {{ b.bus_number }}</option>
+            @for (b of scheduleBuses(); track b.id) {
+              <option [value]="b.id">
+                Bus {{ b.bus_number }}{{ b.status !== 'active' ? ' (inactive — current)' : '' }}
+              </option>
             }
           </select>
         </div>
@@ -337,8 +339,10 @@
                 class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-normal outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white"
               >
                 <option value="">— Select active driver —</option>
-                @for (driver of drivers(); track driver.id) {
-                  <option [value]="driver.id">{{ driver.first_name }} {{ driver.last_name }}</option>
+                @for (driver of scheduleDrivers(); track driver.id) {
+                  <option [value]="driver.id">
+                    {{ driver.first_name }} {{ driver.last_name }}{{ !driver.is_active ? ' (inactive — current)' : '' }}
+                  </option>
                 }
               </select>
             </label>
@@ -350,8 +354,10 @@
                 class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-normal outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white"
               >
                 <option value="">— Select active conductor —</option>
-                @for (conductor of conductors(); track conductor.id) {
-                  <option [value]="conductor.id">{{ conductor.first_name }} {{ conductor.last_name }}</option>
+                @for (conductor of scheduleConductors(); track conductor.id) {
+                  <option [value]="conductor.id">
+                    {{ conductor.first_name }} {{ conductor.last_name }}{{ !conductor.is_active ? ' (inactive — current)' : '' }}
+                  </option>
                 }
               </select>
             </label>
@@ -367,9 +373,6 @@
                 class="ml-1.5 text-[10px] font-medium bg-[#1E5AAA]/10 text-[#1E5AAA] px-1.5 py-0.5 rounded-full"
               >
                 Trip numbers auto-assigned
-              </span>
-              <span class="block normal-case font-normal tracking-normal text-gray-400 mt-1">
-                Schedule any date through December 31, {{ maxScheduleDateTime.slice(0, 4) }}.
               </span>
             </p>
             @if (!editingTrip()) {

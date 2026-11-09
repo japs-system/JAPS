@@ -16,10 +16,10 @@ export interface ScheduleTrip {
   actual_departure_time: string | null;
   arrival_time: string | null;
   status: string;
-  BusModel?: { id: number; bus_number: string; plate_number: string };
+  BusModel?: { id: number; bus_number: string; plate_number: string; status?: ScheduleBus['status'] };
   Route?: { id: number; origin: string; destination: string };
-  driver?: { id: number; first_name: string; last_name: string };
-  conductor?: { id: number; first_name: string; last_name: string };
+  driver?: { id: number; first_name: string; last_name: string; is_active?: boolean };
+  conductor?: { id: number; first_name: string; last_name: string; is_active?: boolean };
 }
 
 export interface ScheduleBus {
@@ -73,6 +73,38 @@ export class Schedules implements OnInit {
   filterDrivers = signal<ScheduleCrewMember[]>([]);
   filterConductors = signal<ScheduleCrewMember[]>([]);
   routes = signal<ScheduleRoute[]>([]);
+
+  scheduleBuses = computed(() => {
+    const options = [...this.activeBuses()];
+    const currentBus = this.editingTrip()?.BusModel;
+    if (currentBus && !options.some((bus) => bus.id === currentBus.id)) {
+      options.push({
+        ...currentBus,
+        status: currentBus.status ?? 'inactive',
+      });
+    }
+    return options;
+  });
+  scheduleDrivers = computed(() => {
+    const options = [...this.drivers()];
+    const currentDriver = this.editingTrip()?.driver;
+    if (currentDriver && !options.some((user) => user.id === currentDriver.id)) {
+      options.push({ ...currentDriver, role: 'driver', is_active: currentDriver.is_active ?? false });
+    }
+    return options;
+  });
+  scheduleConductors = computed(() => {
+    const options = [...this.conductors()];
+    const currentConductor = this.editingTrip()?.conductor;
+    if (currentConductor && !options.some((user) => user.id === currentConductor.id)) {
+      options.push({
+        ...currentConductor,
+        role: 'conductor',
+        is_active: currentConductor.is_active ?? false,
+      });
+    }
+    return options;
+  });
 
   startDate = signal<string>(this.firstOfMonth());
   endDate = signal<string>(this.today());
@@ -292,7 +324,12 @@ export class Schedules implements OnInit {
   openEdit(trip: ScheduleTrip): void {
     if (trip.status !== 'scheduled') return;
     this.editingTrip.set(trip);
-    this.selectedBus.set(this.activeBuses().find((bus) => bus.id === trip.bus_id) ?? null);
+    this.selectedBus.set(
+      this.buses().find((bus) => bus.id === trip.bus_id) ??
+        (trip.BusModel
+          ? { ...trip.BusModel, status: trip.BusModel.status ?? 'inactive' }
+          : null),
+    );
     this.selectedDriverId.set(trip.driver_id);
     this.selectedConductorId.set(trip.conductor_id);
     this.scheduleDate.set(this.toDateTimeLocal(trip.departure_time).slice(0, 10));

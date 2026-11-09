@@ -30,14 +30,16 @@ export interface Trip {
 type TripTab = 'today' | 'all';
 type ViewMode = 'card' | 'table';
 
-/** Formats a date as YYYY-MM-DD using local calendar fields, not UTC (unlike
- *  `toISOString()`, which would shift the date near midnight in any timezone
- *  ahead/behind UTC). */
-function localDateStr(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+/** Formats a date as YYYY-MM-DD in the schedule's Manila timezone. */
+function manilaDateStr(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 @Component({
@@ -65,14 +67,14 @@ export class ConductorDashboard implements OnInit {
   readonly PAGE_SIZES = [6, 9, 18, 36];
 
   // Today's date string for comparison (local calendar date)
-  private todayStr = localDateStr(new Date());
+  private todayStr = manilaDateStr(new Date());
 
   // Keep the active trip at the top, then show today's remaining trips by departure time.
   todayTrips = computed(() =>
     this.trips()
       .filter((t) => {
         if (!t.departure_time) return false;
-        return localDateStr(new Date(t.departure_time)) === this.todayStr;
+        return manilaDateStr(new Date(t.departure_time)) === this.todayStr;
       })
       .sort(
         (a, b) =>
@@ -144,42 +146,29 @@ export class ConductorDashboard implements OnInit {
     () => this.todayTrips().filter((t) => t.status === 'scheduled').length,
   );
 
-  /**
-   * Returns true if this trip can be started right now.
-   * Rule: no earlier-numbered trip on the same bus today is still 'scheduled'.
-   */
-  /** True while the conductor has a trip in progress today — no other trip can start. */
-  hasOngoingToday = computed(() =>
-    this.trips().some(
-      (t) =>
-        t.status === 'ongoing' &&
-        !!t.departure_time &&
-        localDateStr(new Date(t.departure_time)) === this.todayStr,
-    ),
-  );
+  /** One trip at a time: an ongoing trip blocks starting another scheduled trip. */
+  hasOngoingTrip = computed(() => this.trips().some((trip) => trip.status === 'ongoing'));
 
   canStartTrip = computed(() => {
-    const todayStr = this.todayStr;
     const trips = this.trips();
-    const busy = this.hasOngoingToday();
-    // Build a set of (bus_id, trip_number) pairs that are still scheduled today
-    const scheduledToday = trips.filter(
-      (t) =>
-        t.status === 'scheduled' &&
-        !!t.departure_time &&
-        localDateStr(new Date(t.departure_time)) === todayStr,
-    );
+    const busy = this.hasOngoingTrip();
     // For each trip return whether it's the next one to start
     const result = new Map<number, boolean>();
     for (const trip of trips) {
-      if (trip.status !== 'scheduled' || busy) {
+      if (trip.status !== 'scheduled' || busy || !trip.departure_time) {
         result.set(trip.id, false);
         continue;
       }
-      const busId = (trip as any).bus_id ?? trip.BusModel?.id;
-      const blockers = scheduledToday.filter((t) => {
-        const tBusId = (t as any).bus_id ?? t.BusModel?.id;
-        return tBusId === busId && t.trip_number < trip.trip_number;
+      const busId = trip.bus_id;
+      const tripDate = manilaDateStr(new Date(trip.departure_time));
+      const blockers = trips.filter((t) => {
+        return (
+          t.status === 'scheduled' &&
+          !!t.departure_time &&
+          manilaDateStr(new Date(t.departure_time)) === tripDate &&
+          t.bus_id === busId &&
+          t.trip_number < trip.trip_number
+        );
       });
       result.set(trip.id, blockers.length === 0);
     }
