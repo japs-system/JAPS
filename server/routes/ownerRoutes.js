@@ -29,6 +29,17 @@ const localKey = (d) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
+const tripPassengerCountSql = `CASE
+  WHEN EXISTS (SELECT 1 FROM tickets tk WHERE tk.trip_id = t.id)
+    THEN (SELECT COALESCE(SUM(COALESCE(tk.passenger_count, 1)), 0)
+          FROM tickets tk WHERE tk.trip_id = t.id)
+  WHEN t.ticket_number_start ~ '^[0-9]+$'
+    AND t.ticket_number_end ~ '^[0-9]+$'
+    THEN GREATEST(t.ticket_number_end::integer - t.ticket_number_start::integer + 1, 0)
+  ELSE (SELECT COALESCE(SUM(pc.count), 0)
+        FROM passenger_counts pc WHERE pc.trip_id = t.id)
+END`;
+
 const router = express.Router();
 router.use(authenticate, authorize(...OWNER_LEVEL_ROLES));
 
@@ -78,9 +89,8 @@ router.get("/dashboard", async (req, res) => {
 
     // ── KPI: Passenger counts via raw SQL ─────────────────────────────────
     const [pcInRange] = await sequelize.query(
-      `SELECT COALESCE(SUM(pc.count),0) AS total
-       FROM passenger_counts pc
-       JOIN trips t ON t.id = pc.trip_id
+      `SELECT COALESCE(SUM(${tripPassengerCountSql}), 0) AS total
+       FROM trips t
        WHERE t.departure_time BETWEEN :start AND :end`,
       {
         replacements: { start: rangeStart, end: rangeEnd },
@@ -90,9 +100,8 @@ router.get("/dashboard", async (req, res) => {
     const passengerCountInRange = Number(pcInRange.total) || 0;
 
     const [pcPrevRange] = await sequelize.query(
-      `SELECT COALESCE(SUM(pc.count),0) AS total
-       FROM passenger_counts pc
-       JOIN trips t ON t.id = pc.trip_id
+      `SELECT COALESCE(SUM(${tripPassengerCountSql}), 0) AS total
+       FROM trips t
        WHERE t.departure_time BETWEEN :start AND :end`,
       {
         replacements: { start: prevRangeStart, end: prevRangeEnd },
@@ -161,9 +170,8 @@ router.get("/dashboard", async (req, res) => {
 
     // ── Daily passenger volume within the selected range (raw SQL) ────────
     const dailyPassengersRaw = await sequelize.query(
-      `SELECT t.departure_time::date AS date, COALESCE(SUM(pc.count),0) AS total
+      `SELECT t.departure_time::date AS date, COALESCE(SUM(${tripPassengerCountSql}), 0) AS total
        FROM trips t
-       LEFT JOIN passenger_counts pc ON pc.trip_id = t.id
        WHERE t.departure_time BETWEEN :start AND :end
        GROUP BY t.departure_time::date
        ORDER BY t.departure_time::date ASC`,
@@ -268,9 +276,8 @@ router.get("/dashboard", async (req, res) => {
     const weekdayWeekendRaw = await sequelize.query(
       `SELECT EXTRACT(MONTH FROM t.departure_time) AS month,
               EXTRACT(DOW FROM t.departure_time) AS dow,
-              COALESCE(SUM(pc.count),0) AS total
+              COALESCE(SUM(${tripPassengerCountSql}), 0) AS total
        FROM trips t
-       LEFT JOIN passenger_counts pc ON pc.trip_id = t.id
        WHERE t.departure_time >= :since
        GROUP BY EXTRACT(MONTH FROM t.departure_time), EXTRACT(DOW FROM t.departure_time)
        ORDER BY month ASC`,
@@ -516,8 +523,7 @@ router.get("/forecast", async (req, res) => {
     const [lastPax] = await sequelize.query(
       `SELECT to_char(MAX(t.departure_time::date), 'YYYY-MM-DD') AS d
        FROM trips t
-       JOIN passenger_counts pc ON pc.trip_id = t.id
-       WHERE pc.count > 0 AND t.departure_time <= :now`,
+       WHERE (${tripPassengerCountSql}) > 0 AND t.departure_time <= :now`,
       { replacements: { now }, type: sequelize.QueryTypes.SELECT },
     );
     const [lastRev] = await sequelize.query(
@@ -536,9 +542,9 @@ router.get("/forecast", async (req, res) => {
     const ninetyDaysAgo = new Date(anchor);
     ninetyDaysAgo.setDate(anchor.getDate() - 89);
     const dailyRaw = await sequelize.query(
-      `SELECT to_char(t.departure_time::date, 'YYYY-MM-DD') AS date, COALESCE(SUM(pc.count),0) AS total
+      `SELECT to_char(t.departure_time::date, 'YYYY-MM-DD') AS date,
+              COALESCE(SUM(${tripPassengerCountSql}), 0) AS total
        FROM trips t
-       LEFT JOIN passenger_counts pc ON pc.trip_id = t.id
        WHERE t.departure_time >= :since AND t.departure_time <= :until
        GROUP BY t.departure_time::date
        ORDER BY t.departure_time::date ASC`,

@@ -127,16 +127,6 @@
           <th
             class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
           >
-            Departed
-          </th>
-          <th
-            class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
-          >
-            Arrived
-          </th>
-          <th
-            class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
-          >
             Status
           </th>
           <th
@@ -186,20 +176,6 @@
             </td>
             <td class="px-5 py-3 text-gray-600">
               {{ trip.departure_time | date: 'MMM d · h:mm a' }}
-            </td>
-            <td class="px-5 py-3 text-gray-600 whitespace-nowrap">
-              @if (trip.actual_departure_time) {
-                {{ trip.actual_departure_time | date: 'h:mm a' }}
-              } @else {
-                <span class="text-gray-300">—</span>
-              }
-            </td>
-            <td class="px-5 py-3 text-gray-600 whitespace-nowrap">
-              @if (trip.arrival_time) {
-                {{ trip.arrival_time | date: 'h:mm a' }}
-              } @else {
-                <span class="text-gray-300">—</span>
-              }
             </td>
             <td class="px-5 py-3">
               @switch (trip.status) {
