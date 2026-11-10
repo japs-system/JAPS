@@ -51,10 +51,15 @@ test("allows today and future schedule dates through the next five-year mileston
     scheduleDepartureError("2025-12-31T23:59", nowIn2026),
     "Trips cannot be scheduled before today.",
   );
+  assert.equal(scheduleDepartureError("2025-12-31T23:59", nowIn2026, true), null);
   assert.equal(scheduleDepartureError("2026-01-01T00:00", nowIn2026), null);
   assert.equal(scheduleDepartureError("2030-12-31T23:59", nowIn2026), null);
   assert.equal(
     scheduleDepartureError("2031-01-01T00:00", nowIn2026),
+    "Trips can only be scheduled through 2030-12-31.",
+  );
+  assert.equal(
+    scheduleDepartureError("2031-01-01T00:00", nowIn2026, true),
     "Trips can only be scheduled through 2030-12-31.",
   );
 

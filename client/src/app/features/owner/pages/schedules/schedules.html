@@ -398,6 +398,30 @@
             }
           </div>
 
+          @if (pastSchedulesUnlocked()) {
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <p class="text-xs text-amber-800">Past schedule dates are unlocked. Check departure dates carefully before assigning.</p>
+              <button
+                type="button"
+                (click)="lockPastSchedules()"
+                class="text-xs font-semibold text-amber-800 underline underline-offset-2 cursor-pointer"
+              >
+                Lock past dates
+              </button>
+            </div>
+          } @else {
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+              <p class="text-xs text-gray-600">Need to assign an earlier schedule?</p>
+              <button
+                type="button"
+                (click)="unlockPastSchedules()"
+                class="text-xs font-semibold text-[#1E5AAA] underline underline-offset-2 cursor-pointer"
+              >
+                Unlock past dates
+              </button>
+            </div>
+          }
+
           <!-- Column headers -->
           <div class="grid grid-cols-[1.5rem_minmax(0,1fr)_2rem] sm:grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)_2rem] gap-x-2 gap-y-1 px-1 mb-1">
             <span class="text-[10px] font-semibold text-gray-400 uppercase">#</span>
@@ -430,7 +454,7 @@
                   type="datetime-local"
                   [value]="row.departure_time"
                   (change)="updateRowTime($index, $event)"
-                  [min]="minScheduleDateTime"
+                  [min]="pastSchedulesUnlocked() ? null : minScheduleDateTime"
                   [max]="maxScheduleDateTime"
                   class="col-start-2 row-start-2 sm:col-auto sm:row-auto min-w-0 w-full border border-gray-300 rounded-lg px-2 py-2 text-xs sm:text-sm outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20"
                   [class.border-red-400]="!row.departure_time"

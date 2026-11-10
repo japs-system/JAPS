@@ -416,6 +416,7 @@ const createTrip = async (req, res) => {
     trip_number,
     departure_time,
   } = req.body;
+  const allowPastSchedule = req.body.allow_past_schedule === true;
 
   if (!bus_id || !route_id || !driver_id || !conductor_id || !trip_number || !departure_time || Number.isNaN(new Date(departure_time).getTime())) {
     return res.status(400).json({ message: "Bus, route, active driver, active conductor, trip number, and valid departure time are required." });
@@ -424,7 +425,7 @@ const createTrip = async (req, res) => {
   if (!parsedDeparture) {
     return res.status(400).json({ message: "Provide a valid departure date and time." });
   }
-  const departureError = scheduleDepartureError(parsedDeparture);
+  const departureError = scheduleDepartureError(parsedDeparture, new Date(), allowPastSchedule);
   if (departureError) return res.status(400).json({ message: departureError });
 
   const resources = await validateScheduleResources({
@@ -456,6 +457,7 @@ const createTrip = async (req, res) => {
 // POST /api/buses/trips/bulk — create multiple trips, trip numbers auto-assigned
 const createTripsBulkInner = async (req, res) => {
   const { bus_id, driver_id, conductor_id, trips } = req.body;
+  const allowPastSchedule = req.body.allow_past_schedule === true;
   // trips = [{ route_id, departure_time }]
   if (
     !bus_id ||
@@ -477,9 +479,14 @@ const createTripsBulkInner = async (req, res) => {
   if (parsedTrips.some((trip) => !trip.route_id || !trip.departureDate)) {
     return res.status(400).json({ message: "Every trip must include a valid route and departure time." });
   }
-  const invalidDeparture = parsedTrips.find((trip) => scheduleDepartureError(trip.departureDate));
+  const now = new Date();
+  const invalidDeparture = parsedTrips.find(
+    (trip) => scheduleDepartureError(trip.departureDate, now, allowPastSchedule),
+  );
   if (invalidDeparture) {
-    return res.status(400).json({ message: scheduleDepartureError(invalidDeparture.departureDate) });
+    return res.status(400).json({
+      message: scheduleDepartureError(invalidDeparture.departureDate, now, allowPastSchedule),
+    });
   }
 
   // Schedule conflicts: same bus, driver or conductor at the same date and time,
@@ -605,11 +612,12 @@ const updateTrip = async (req, res) => {
   }
 
   const { bus_id, route_id, driver_id, conductor_id, departure_time } = req.body;
+  const allowPastSchedule = req.body.allow_past_schedule === true;
   const nextDeparture = parseManilaDateTime(departure_time);
   if (!bus_id || !route_id || !driver_id || !conductor_id || !nextDeparture) {
     return res.status(400).json({ message: "Bus, route, active driver, active conductor, and a valid departure time are required." });
   }
-  const departureError = scheduleDepartureError(nextDeparture);
+  const departureError = scheduleDepartureError(nextDeparture, new Date(), allowPastSchedule);
   if (departureError) return res.status(400).json({ message: departureError });
 
   const resources = await validateScheduleResources({
