@@ -172,6 +172,23 @@ const getAssignedTrips = async (req, res) => {
           { model: BusModel, attributes: ["id", "bus_number", "plate_number"] },
           { model: Route, attributes: ["id", "origin", "destination"] },
           {
+            model: Ticket,
+            attributes: [
+              "id",
+              "ticket_number",
+              "category",
+              "passengers",
+              "passenger_count",
+              "boarding_point",
+              "boarding_km",
+              "dropping_point",
+              "dropping_km",
+              "distance_km",
+              "fare",
+              "issued_at",
+            ],
+          },
+          {
             model: User,
             as: "driver",
             attributes: ["id", "first_name", "last_name"],
@@ -184,6 +201,9 @@ const getAssignedTrips = async (req, res) => {
         ],
         order: [["departure_time", "ASC"]],
       });
+      for (const trip of trips) {
+        trip.Tickets.sort((a, b) => Number(a.ticket_number) - Number(b.ticket_number));
+      }
       return res.json(trips);
     }
 

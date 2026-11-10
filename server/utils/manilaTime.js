@@ -60,13 +60,13 @@ const manilaDayBounds = (dateKey) => {
 
 const manilaToday = () => manilaDateKey(new Date());
 
-const scheduleDepartureError = (departure, now = new Date(), allowPast = false) => {
+const scheduleDepartureError = (departure, now = new Date()) => {
   const parsedDeparture = parseManilaDateTime(departure);
   if (!parsedDeparture) return "Provide a valid departure date and time.";
 
   const today = manilaDateKey(now);
   const departureDate = manilaDateKey(parsedDeparture);
-  if (!allowPast && departureDate < today) return "Trips cannot be scheduled before today.";
+  if (departureDate < today) return "Trips cannot be scheduled before today.";
 
   const currentYear = Number(today.slice(0, 4));
   const lastAllowedYear = (Math.floor(currentYear / 5) + 1) * 5;

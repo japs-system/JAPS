@@ -57,15 +57,9 @@ describe('Schedules', () => {
     expect(component.scheduleDate()).toBe('2026-11-08');
   });
 
-  it('requires unlocking before scheduling before today', () => {
+  it('does not allow scheduling before today', () => {
     expect(component.isDepartureAllowed('2000-01-01T23:59')).toBe(false);
     expect(component.isDepartureAllowed(`${component.minScheduleDateTime}`)).toBe(true);
-
-    component.unlockPastSchedules();
-    expect(component.isDepartureAllowed('2000-01-01T23:59')).toBe(true);
-
-    component.lockPastSchedules();
-    expect(component.isDepartureAllowed('2000-01-01T23:59')).toBe(false);
   });
 
   it('only includes active buses and crew in schedule filters', () => {
@@ -146,42 +140,8 @@ describe('Schedules', () => {
       conductor_id: 4,
       route_id: 40,
       departure_time: expectedDeparture,
-      allow_past_schedule: false,
     });
     request.flush({});
-
-    httpMock
-      .expectOne(
-        `${environment.apiUrl}/api/buses/trips?startDate=${component.startDate()}&endDate=${component.endDate()}`,
-      )
-      .flush([]);
-  });
-
-  it('submits a past schedule only after past dates are unlocked', () => {
-    component.openAdd();
-    component.selectedBus.set({ id: 10, bus_number: 'BUS-10', plate_number: 'ABC-010', status: 'active' });
-    component.selectedDriverId.set(2);
-    component.selectedConductorId.set(4);
-    component.scheduleDate.set('2000-01-01');
-    component.tripRows.set([{ route_id: 40, departure_time: '2000-01-01T06:00' }]);
-
-    expect(component.canSave()).toBe(false);
-    component.unlockPastSchedules();
-    expect(component.canSave()).toBe(true);
-
-    component.save();
-
-    const request = httpMock.expectOne(`${environment.apiUrl}/api/buses/trips/bulk`);
-    expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual({
-      bus_id: 10,
-      driver_id: 2,
-      conductor_id: 4,
-      date: '2000-01-01',
-      allow_past_schedule: true,
-      trips: [{ route_id: 40, departure_time: '2000-01-01T06:00' }],
-    });
-    request.flush([]);
 
     httpMock
       .expectOne(

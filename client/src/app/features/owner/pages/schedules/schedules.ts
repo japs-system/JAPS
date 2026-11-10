@@ -200,7 +200,6 @@ export class Schedules implements OnInit {
   selectedConductorId = signal<number | null>(null);
   editingTrip = signal<ScheduleTrip | null>(null);
   scheduleDate = signal<string>(this.today());
-  pastSchedulesUnlocked = signal(false);
 
   // The list of trip rows being built
   tripRows = signal<TripRow[]>([]);
@@ -244,7 +243,7 @@ export class Schedules implements OnInit {
 
   isDepartureAllowed(value: string): boolean {
     const date = value.slice(0, 10);
-    return !!value && (this.pastSchedulesUnlocked() || date >= this.today()) && date <= this.maxScheduleDate;
+    return !!value && date >= this.today() && date <= this.maxScheduleDate;
   }
 
   /** First day of the current month (YYYY-MM-DD) in Manila time. */
@@ -331,7 +330,6 @@ export class Schedules implements OnInit {
   // ── Modal ──
   openAdd(): void {
     this.editingTrip.set(null);
-    this.pastSchedulesUnlocked.set(false);
     this.selectedBus.set(null);
     this.selectedDriverId.set(null);
     this.selectedConductorId.set(null);
@@ -343,15 +341,6 @@ export class Schedules implements OnInit {
   closeModal(): void {
     this.showModal.set(false);
     this.editingTrip.set(null);
-    this.pastSchedulesUnlocked.set(false);
-  }
-
-  unlockPastSchedules(): void {
-    this.pastSchedulesUnlocked.set(true);
-  }
-
-  lockPastSchedules(): void {
-    this.pastSchedulesUnlocked.set(false);
   }
 
   onModalBusChange(e: Event): void {
@@ -393,7 +382,6 @@ export class Schedules implements OnInit {
 
   openEdit(trip: ScheduleTrip): void {
     if (trip.status !== 'scheduled') return;
-    this.pastSchedulesUnlocked.set(false);
     this.editingTrip.set(trip);
     this.selectedBus.set(
       this.buses().find((bus) => bus.id === trip.bus_id) ??
@@ -486,14 +474,9 @@ export class Schedules implements OnInit {
       return;
     }
     if (!this.tripRows().every((row) => this.isDepartureAllowed(row.departure_time))) {
-      const hasPastDeparture = this.tripRows().some(
-        (row) => row.departure_time.slice(0, 10) < this.today(),
-      );
       this.alertService.error(
         'Invalid departure date',
-        hasPastDeparture && !this.pastSchedulesUnlocked()
-          ? 'Unlock past dates before assigning a schedule before today.'
-          : `Schedule departures must be on or before ${this.maxScheduleDate}.`,
+        `Schedule departures must be today or later and on or before ${this.maxScheduleDate}.`,
       );
       return;
     }
@@ -510,7 +493,6 @@ export class Schedules implements OnInit {
             conductor_id: conductorId,
             route_id: row.route_id,
             departure_time: row.departure_time,
-            allow_past_schedule: this.pastSchedulesUnlocked(),
           },
           { withCredentials: true },
         )
@@ -534,7 +516,6 @@ export class Schedules implements OnInit {
       driver_id: driverId,
       conductor_id: conductorId,
       date: this.scheduleDate(),
-      allow_past_schedule: this.pastSchedulesUnlocked(),
       trips: this.tripRows().map((r) => ({
         route_id: r.route_id,
         departure_time: r.departure_time,

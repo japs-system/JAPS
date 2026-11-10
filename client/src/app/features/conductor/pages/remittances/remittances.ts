@@ -65,9 +65,10 @@ interface Trip {
   driver_id: number;
   conductor_id: number;
   BusModel?: { id: number; bus_number: string; plate_number: string };
-  Route?: { origin: string; destination: string };
+  Route: { origin: string; destination: string } | null;
   driver?: { id: number; first_name: string; last_name: string };
   conductor?: { id: number; first_name: string; last_name: string };
+  Tickets?: RemittanceTicket[];
   // Number of tickets issued on the trip (0 = ran without the ticketing terminal).
   ticket_count?: number | string;
 }
@@ -629,6 +630,9 @@ export class ConductorRemittancesPage implements OnInit {
   }
 
   selectedTrips = computed(() => this.allTrips().filter((t) => this.selectedTripIds().has(t.id)));
+  ticketTrips = computed(() =>
+    this.selectedTrips().filter((trip) => !this.isManual(trip) && (trip.Tickets?.length ?? 0) > 0),
+  );
 
   /** Commissions are calculated from Net Gross and cannot be manually overridden. */
   autoCalculateCommissions(): void {

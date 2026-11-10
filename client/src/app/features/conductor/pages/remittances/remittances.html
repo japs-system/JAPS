@@ -438,6 +438,21 @@
               }
             </div>
 
+            @if (ticketTrips().length > 0) {
+              <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100">
+                  <h3 class="font-bold text-gray-800 text-sm flex items-center gap-2">
+                    <i class="pi pi-ticket text-blue-500"></i>
+                    Printed Tickets
+                  </h3>
+                  <p class="text-xs text-gray-400 mt-1">
+                    Select a trip to review its tickets before submitting the remittance.
+                  </p>
+                </div>
+                <app-remittance-trips-table [trips]="ticketTrips()" />
+              </div>
+            }
+
             <!-- Expenses -->
             <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <h3 class="font-bold text-gray-800 text-sm mb-4 flex items-center gap-2">
