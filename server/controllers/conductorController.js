@@ -36,6 +36,7 @@ const {
   calculateTotalLess,
 } = require("../utils/remittanceCalculations");
 const { toManualTicketRow } = require("../utils/manualTicket");
+const { sendEmailBatch } = require("../utils/emailDelivery");
 
 // Fire-and-forget wrapper: a failed email/notification must never break the real action.
 const notify = (promise) => promise.catch((err) => console.error("Notification failed:", err));
@@ -56,7 +57,7 @@ const notifyConductorOfSubmission = (remittance, isResubmission) =>
         BusModel.findByPk(remittance.bus_id),
         User.findByPk(remittance.conductor_id),
       ]);
-      if (!conductor?.email) return;
+      if (!conductor) return;
       await sendRemittanceReceiptEmail({ 
         to: conductor.email,
         name: fullName(conductor),
@@ -955,25 +956,31 @@ const submitRemittance = async (req, res) => {
 
     await transaction.commit();
 
-    notifyConductorOfSubmission(remittance, false);
-    notifyReviewersOfSubmission(remittance, !!priorRejected);
-    notify(
+    await notifyConductorOfSubmission(remittance, false);
+    await notifyReviewersOfSubmission(remittance, !!priorRejected);
+    await notify(
       (async () => {
         const [bus, conductor, reviewers] = await Promise.all([
           BusModel.findByPk(bus_id),
           User.findByPk(conductorId),
           User.findAll({ where: { role: ["owner", "admin_staff", "audit_teller"], is_active: true } }),
         ]);
-        for (const reviewer of reviewers) {
-          await sendRemittanceSubmittedEmail({
-            to: reviewer.email,
-            conductorName: conductor ? fullName(conductor) : "A conductor",
-            busLabel: bus?.bus_number ?? String(bus_id),
-            date,
-            netCollection,
-            isResubmission: !!priorRejected,
-          });
-        }
+        await sendEmailBatch(
+          reviewers
+            .filter(Boolean)
+            .map((reviewer) => ({
+              send: () =>
+                sendRemittanceSubmittedEmail({
+                  to: reviewer.email,
+                  conductorName: conductor ? fullName(conductor) : "A conductor",
+                  busLabel: bus?.bus_number ?? String(bus_id),
+                  date,
+                  netCollection,
+                  isResubmission: !!priorRejected,
+                }),
+            })),
+          "Remittance submission email",
+        );
       })(),
     );
 
@@ -1079,25 +1086,31 @@ const resubmitRemittance = async (req, res) => {
 
     await transaction.commit();
 
-    notifyConductorOfSubmission(remittance, true);
-    notifyReviewersOfSubmission(remittance, true);
-    notify(
+    await notifyConductorOfSubmission(remittance, true);
+    await notifyReviewersOfSubmission(remittance, true);
+    await notify(
       (async () => {
         const [bus, conductor, reviewers] = await Promise.all([
           BusModel.findByPk(remittance.bus_id),
           User.findByPk(conductorId),
           User.findAll({ where: { role: ["owner", "admin_staff", "audit_teller"], is_active: true } }),
         ]);
-        for (const reviewer of reviewers) {
-          await sendRemittanceSubmittedEmail({
-            to: reviewer.email,
-            conductorName: conductor ? fullName(conductor) : "A conductor",
-            busLabel: bus?.bus_number ?? String(remittance.bus_id),
-            date: remittance.date,
-            netCollection,
-            isResubmission: true,
-          });
-        }
+        await sendEmailBatch(
+          reviewers
+            .filter(Boolean)
+            .map((reviewer) => ({
+              send: () =>
+                sendRemittanceSubmittedEmail({
+                  to: reviewer.email,
+                  conductorName: conductor ? fullName(conductor) : "A conductor",
+                  busLabel: bus?.bus_number ?? String(remittance.bus_id),
+                  date: remittance.date,
+                  netCollection,
+                  isResubmission: true,
+                }),
+            })),
+          "Remittance resubmission email",
+        );
       })(),
     );
 

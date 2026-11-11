@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const { sendWithRetry } = require("../utils/emailDelivery");
 
 const transporter = nodemailer.createTransport({
 	service: "gmail",
@@ -7,6 +8,23 @@ const transporter = nodemailer.createTransport({
 		pass: process.env.SMTP_APP_PASSWORD,
 	},
 });
+
+const verifyMailer = async () => {
+	const missing = ["SMTP_USER", "SMTP_APP_PASSWORD"].filter(
+		(key) => !process.env[key]?.trim(),
+	);
+	if (missing.length) {
+		console.error(`Email delivery is not configured; missing ${missing.join(", ")}.`);
+		return;
+	}
+
+	try {
+		await transporter.verify();
+		console.log("Email transport connection verified.");
+	} catch (error) {
+		console.error("Email transport verification failed:", error.message, error.code ?? "");
+	}
+};
 
 const BRAND_BLUE = "#1E5AAA";
 // The logo is loaded from the website, not attached to every email — the Gmail
@@ -47,13 +65,27 @@ const renderEmail = ({ heading, intro, tableRows, note, ctaLabel, ctaUrl }) => `
 		</div>
 	</div>`;
 
-const send = (to, subject, html) =>
-	transporter.sendMail({
-		from: process.env.SMTP_FROM || process.env.SMTP_USER,
-		to,
-		subject,
-		html,
-	});
+const send = async (to, subject, html) => {
+	if (!process.env.SMTP_USER?.trim() || !process.env.SMTP_APP_PASSWORD?.trim()) {
+		throw new Error("Email delivery requires SMTP_USER and SMTP_APP_PASSWORD.");
+	}
+	if (typeof to !== "string" || !to.trim()) {
+		throw new Error("Email delivery requires a recipient address.");
+	}
+
+	const result = await sendWithRetry(() =>
+		transporter.sendMail({
+			from: process.env.SMTP_FROM || process.env.SMTP_USER,
+			to,
+			subject,
+			html,
+		}),
+	);
+	if (!result.accepted?.length) {
+		throw new Error("The email provider did not accept the message.");
+	}
+	return result;
+};
 
 const fullName = (u) => [u.first_name, u.last_name].filter(Boolean).join(" ");
 
@@ -274,6 +306,7 @@ const sendRemittanceReceiptEmail = async ({ to, name, busLabel, remittance, isRe
 };
 
 module.exports = {
+	verifyMailer,
 	fullName,
 	sendAccountCredentialsEmail,
 	sendTripScheduledEmail,

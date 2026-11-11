@@ -13,6 +13,7 @@ const driverRoutes = require("./routes/driverRoutes");
 const auditTellerRoutes = require("./routes/auditTellerRoutes");
 const ownerRoutes = require("./routes/ownerRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const { verifyMailer } = require("./config/mailer");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -59,7 +60,10 @@ sequelize
 		return sequelize.sync(syncOptions);
 	})
 	.then(() => {
-		app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+		app.listen(PORT, () => {
+			console.log(`Server running on port ${PORT}`);
+			void verifyMailer();
+		});
 	})
 	.catch((err) => {
 		console.error("Unable to connect to the database:", err);

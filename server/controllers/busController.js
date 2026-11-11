@@ -19,6 +19,7 @@ const {
 } = require("../config/mailer");
 const { OWNER_LEVEL_ROLES } = require("../middleware/auth");
 const { createNotification } = require("../services/notificationService");
+const { sendEmailBatch } = require("../utils/emailDelivery");
 const {
   addCalendarDays,
   assignTripNumbersByManilaDay,
@@ -30,7 +31,8 @@ const {
   scheduleDepartureError,
 } = require("../utils/manilaTime");
 
-const notify = (promise) => promise.catch((err) => console.error("Email notification failed:", err));
+const notify = (promise, context = "Email notification failed") =>
+	promise.catch((err) => console.error(`${context}:`, err.message, err.code ?? ""));
 
 // Friendly date/time text for in-app notifications (Philippine time).
 const formatDate = (value) =>
@@ -128,7 +130,7 @@ const assignCrew = async (req, res) => {
     if (previousId) {
       const prevUser = await User.findByPk(previousId);
       if (prevUser) {
-        notify(
+        await notify(
           sendCrewAssignmentEmail({
             to: prevUser.email,
             name: fullName(prevUser),
@@ -149,7 +151,7 @@ const assignCrew = async (req, res) => {
     if (newId) {
       const newUser = await User.findByPk(newId);
       if (newUser) {
-        notify(
+        await notify(
           sendCrewAssignmentEmail({
             to: newUser.email,
             name: fullName(newUser),
@@ -169,8 +171,15 @@ const assignCrew = async (req, res) => {
     }
   };
 
-  await notifyCrewChange(previousDriverId, driver_id || null, "driver");
-  await notifyCrewChange(previousConductorId, conductor_id || null, "conductor");
+  const crewChanges = await Promise.allSettled([
+    notifyCrewChange(previousDriverId, driver_id || null, "driver"),
+    notifyCrewChange(previousConductorId, conductor_id || null, "conductor"),
+  ]);
+  crewChanges.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("Bus crew assignment notification failed:", result.reason?.message ?? result.reason);
+    }
+  });
 
   return res.json(bus);
 };
@@ -228,41 +237,51 @@ const notifyTripScheduled = async ({ bus_id, route_id, driver_id, conductor_id, 
   const busLabel = bus?.bus_number ?? String(bus_id);
   const routeLabel = route ? `${route.origin} → ${route.destination}` : "";
 
-  // In-app notification for the conductor and the driver.
-  for (const [person, link] of [
-    [conductor, "/conductor/trips"],
-    [driver, "/driver/dashboard"],
-  ]) {
-    if (!person) continue;
-    await createNotification({
-      userId: person.id,
-      type: "schedule_assigned",
-      title: "New schedule assigned",
-      message: `Trip #${trip_number}${routeLabel ? " · " + routeLabel : ""} · Bus ${busLabel} on ${formatDate(departure_time)} at ${formatTime(departure_time)}.`,
-      link,
-    });
-  }
-
-  for (const user of [driver, conductor]) {
-    if (!user) continue;
-    notify(
-      sendTripScheduledEmail({
-        to: user.email,
-        name: fullName(user),
-        tripNumber: trip_number,
-        busLabel,
-        routeLabel,
-        departureTime: departure_time,
-      }),
-    );
-  }
-
+  await sendEmailBatch(
+    [driver, conductor]
+      .filter(Boolean)
+      .map((user) => ({
+        send: () =>
+          sendTripScheduledEmail({
+            to: user.email,
+            name: fullName(user),
+            tripNumber: trip_number,
+            busLabel,
+            routeLabel,
+            departureTime: departure_time,
+          }),
+      })),
+    "Trip schedule email",
+  );
   await notifyManagementOfSchedule({
     busLabel,
     date: departure_time,
     driver,
     conductor,
     trips: [{ tripNumber: trip_number, routeLabel, departureTime: departure_time }],
+  });
+
+  // In-app notifications are independent of email delivery.
+  const notifications = await Promise.allSettled(
+    [
+      [conductor, "/conductor/trips"],
+      [driver, "/driver/dashboard"],
+    ]
+      .filter(([person]) => person)
+      .map(([person, link]) =>
+        createNotification({
+          userId: person.id,
+          type: "schedule_assigned",
+          title: "New schedule assigned",
+          message: `Trip #${trip_number}${routeLabel ? " · " + routeLabel : ""} · Bus ${busLabel} on ${formatDate(departure_time)} at ${formatTime(departure_time)}.`,
+          link,
+        }),
+      ),
+  );
+  notifications.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("Schedule in-app notification failed:", result.reason?.message ?? result.reason);
+    }
   });
 };
 
@@ -271,19 +290,23 @@ const notifyManagementOfSchedule = async ({ busLabel, date, driver, conductor, t
   const managers = await User.findAll({
     where: { role: OWNER_LEVEL_ROLES, is_active: true },
   });
-  for (const manager of managers) {
-    notify(
-      sendTripsScheduledManagementEmail({
-        to: manager.email,
-        name: fullName(manager),
-        busLabel,
-        date,
-        driverName: driver ? fullName(driver) : "Unassigned",
-        conductorName: conductor ? fullName(conductor) : "Unassigned",
-        trips,
-      }),
-    );
-  }
+  await sendEmailBatch(
+    managers
+      .filter(Boolean)
+      .map((manager) => ({
+        send: () =>
+          sendTripsScheduledManagementEmail({
+            to: manager.email,
+            name: fullName(manager),
+            busLabel,
+            date,
+            driverName: driver ? fullName(driver) : "Unassigned",
+            conductorName: conductor ? fullName(conductor) : "Unassigned",
+            trips,
+          }),
+      })),
+    "Schedule management email",
+  );
 };
 
 const notifyTripScheduleUpdated = async (before, after) => {
@@ -305,49 +328,66 @@ const notifyTripScheduleUpdated = async (before, after) => {
     [after.conductor_id, "/conductor/trips"],
   ]);
 
-  for (const [userId, link] of affectedCrew) {
-    if (!userId) continue;
-    await createNotification({
-      userId,
-      type: "schedule_updated",
-      title: "Schedule updated",
-      message: `Trip #${after.trip_number} · Bus ${busLabel}${routeLabel ? ` · ${routeLabel}` : ""} is now scheduled for ${formatDate(after.departure_time)} at ${formatTime(after.departure_time)}.`,
-      link,
-    });
-  }
-
-  for (const user of crewUsers) {
-    notify(sendTripScheduleUpdatedEmail({
-      to: user.email,
-      name: fullName(user),
-      busLabel,
-      tripNumber: after.trip_number,
-      routeLabel,
-      driverName: driver ? fullName(driver) : "Unassigned",
-      conductorName: conductor ? fullName(conductor) : "Unassigned",
-      departureTime: after.departure_time,
-    }));
-  }
+  const emailDeliveries = [
+    ...crewUsers.map((user) => ({
+      send: () =>
+        sendTripScheduleUpdatedEmail({
+          to: user.email,
+          name: fullName(user),
+          busLabel,
+          tripNumber: after.trip_number,
+          routeLabel,
+          driverName: driver ? fullName(driver) : "Unassigned",
+          conductorName: conductor ? fullName(conductor) : "Unassigned",
+          departureTime: after.departure_time,
+        }),
+    })),
+  ];
 
   for (const manager of managers) {
-    await createNotification({
-      userId: manager.id,
-      type: "schedule_updated",
-      title: "Schedule updated",
-      message: `Trip #${after.trip_number} on Bus ${busLabel} was updated for ${formatDate(after.departure_time)} at ${formatTime(after.departure_time)}.`,
-      link: "/owner/schedules",
+    emailDeliveries.push({
+      send: () =>
+        sendTripScheduleUpdatedEmail({
+          to: manager.email,
+          name: fullName(manager),
+          busLabel,
+          tripNumber: after.trip_number,
+          routeLabel,
+          driverName: driver ? fullName(driver) : "Unassigned",
+          conductorName: conductor ? fullName(conductor) : "Unassigned",
+          departureTime: after.departure_time,
+        }),
     });
-    notify(sendTripScheduleUpdatedEmail({
-      to: manager.email,
-      name: fullName(manager),
-      busLabel,
-      tripNumber: after.trip_number,
-      routeLabel,
-      driverName: driver ? fullName(driver) : "Unassigned",
-      conductorName: conductor ? fullName(conductor) : "Unassigned",
-      departureTime: after.departure_time,
-    }));
   }
+  await sendEmailBatch(emailDeliveries, "Schedule update email");
+
+  const notifications = await Promise.allSettled([
+    ...[...affectedCrew].map(([userId, link]) =>
+      userId
+        ? createNotification({
+            userId,
+            type: "schedule_updated",
+            title: "Schedule updated",
+            message: `Trip #${after.trip_number} · Bus ${busLabel}${routeLabel ? ` · ${routeLabel}` : ""} is now scheduled for ${formatDate(after.departure_time)} at ${formatTime(after.departure_time)}.`,
+            link,
+          })
+        : Promise.resolve(),
+    ),
+    ...managers.map((manager) =>
+      createNotification({
+        userId: manager.id,
+        type: "schedule_updated",
+        title: "Schedule updated",
+        message: `Trip #${after.trip_number} on Bus ${busLabel} was updated for ${formatDate(after.departure_time)} at ${formatTime(after.departure_time)}.`,
+        link: "/owner/schedules",
+      }),
+    ),
+  ]);
+  notifications.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("Schedule update in-app notification failed:", result.reason?.message ?? result.reason);
+    }
+  });
 };
 
 const validateScheduleResources = async ({ bus_id, driver_id, conductor_id, route_id, existingTrip }) => {
@@ -448,7 +488,10 @@ const createTrip = async (req, res) => {
     status: "scheduled",
   });
 
-  notify(notifyTripScheduled({ bus_id, route_id, driver_id, conductor_id, trip_number, departure_time: parsedDeparture }));
+  await notify(
+    notifyTripScheduled({ bus_id, route_id, driver_id, conductor_id, trip_number, departure_time: parsedDeparture }),
+    "Schedule notification failed",
+  );
 
   return res.status(201).json(trip);
 };
@@ -536,7 +579,7 @@ const createTripsBulkInner = async (req, res) => {
     created.push(trip);
   }
 
-  notify(
+  await notify(
     (async () => {
       const [bus, driver, conductor, routes] = await Promise.all([
         BusInfo.findByPk(bus_id),
@@ -552,36 +595,47 @@ const createTripsBulkInner = async (req, res) => {
         departureTime: t.departure_time,
       }));
 
-      // One in-app notification for the whole batch (not one per trip).
-      const count = created.length;
-      for (const [person, link] of [
-        [conductor, "/conductor/trips"],
-        [driver, "/driver/dashboard"],
-      ]) {
-        if (!person) continue;
-        await createNotification({
-          userId: person.id,
-          type: "schedule_assigned",
-          title: count === 1 ? "New schedule assigned" : `${count} new trips scheduled`,
-          message: `Bus ${busLabel} on ${formatDate(date)}: ${count} trip${count === 1 ? "" : "s"}, first departure at ${formatTime(created[0].departure_time)}.`,
-          link,
-        });
-      }
-
-      for (const user of [driver, conductor]) {
-        if (!user) continue;
-        notify(
-          sendTripsScheduledSummaryEmail({
-            to: user.email,
-            name: fullName(user),
-            busLabel,
-            date,
-            trips: tripSummaries,
-          }),
-        );
-      }
+      await sendEmailBatch(
+        [driver, conductor]
+          .filter(Boolean)
+          .map((user) => ({
+            send: () =>
+              sendTripsScheduledSummaryEmail({
+                to: user.email,
+                name: fullName(user),
+                busLabel,
+                date,
+                trips: tripSummaries,
+              }),
+          })),
+        "Trip schedule email",
+      );
 
       await notifyManagementOfSchedule({ busLabel, date, driver, conductor, trips: tripSummaries });
+
+      // One in-app notification for the whole batch (not one per trip).
+      const count = created.length;
+      const notifications = await Promise.allSettled(
+        [
+          [conductor, "/conductor/trips"],
+          [driver, "/driver/dashboard"],
+        ]
+          .filter(([person]) => person)
+          .map(([person, link]) =>
+            createNotification({
+              userId: person.id,
+              type: "schedule_assigned",
+              title: count === 1 ? "New schedule assigned" : `${count} new trips scheduled`,
+              message: `Bus ${busLabel} on ${formatDate(date)}: ${count} trip${count === 1 ? "" : "s"}, first departure at ${formatTime(created[0].departure_time)}.`,
+              link,
+            }),
+          ),
+      );
+      notifications.forEach((result) => {
+        if (result.status === "rejected") {
+          console.error("Bulk schedule in-app notification failed:", result.reason?.message ?? result.reason);
+        }
+      });
     })(),
   );
 
@@ -647,7 +701,10 @@ const updateTrip = async (req, res) => {
     trip_number = Number(highestTripNumber) + 1;
   }
   await trip.update({ bus_id, route_id, driver_id, conductor_id, departure_time: nextDeparture, trip_number });
-  notify(notifyTripScheduleUpdated(before, trip.get({ plain: true })));
+  await notify(
+    notifyTripScheduleUpdated(before, trip.get({ plain: true })),
+    "Schedule update notification failed",
+  );
   return res.json(trip);
 };
 

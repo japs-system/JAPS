@@ -9,6 +9,7 @@ const {
 } = require("../models");
 const { fullName, sendRemittanceStatusEmail } = require("../config/mailer");
 const { createNotification, notifyOwners } = require("../services/notificationService");
+const { sendEmailBatch } = require("../utils/emailDelivery");
 const {
   calculateCommissions,
   calculateTotalExpenses,
@@ -289,6 +290,22 @@ const approveRemittance = async (req, res) => {
       cash_received: cashReceived,
     });
 
+    await sendEmailBatch(
+      [remittance.driver, remittance.conductor]
+        .filter(Boolean)
+        .map((user) => ({
+          send: () =>
+            sendRemittanceStatusEmail({
+              to: user.email,
+              name: fullName(user),
+              status: "approved",
+              date: remittance.date,
+              busLabel: remittance.BusModel?.bus_number ?? "",
+            }),
+        })),
+      "Remittance approval email",
+    );
+
     // In-app notifications: the conductor's and driver's bells, then the owner(s).
     await createNotification({
       userId: remittance.conductor_id,
@@ -307,19 +324,6 @@ const approveRemittance = async (req, res) => {
       });
     }
     notifyOwnersOfReview(remittance, "approved", auditTellerId, cashReceived);
-
-    for (const user of [remittance.driver, remittance.conductor]) {
-      if (!user) continue;
-      notify(
-        sendRemittanceStatusEmail({
-          to: user.email,
-          name: fullName(user),
-          status: "approved",
-          date: remittance.date,
-          busLabel: remittance.BusModel?.bus_number ?? "",
-        }),
-      );
-    }
 
     return res.json(remittance);
   } catch (error) {
@@ -360,6 +364,23 @@ const rejectRemittance = async (req, res) => {
       cash_received: cashReceived,
     });
 
+    await sendEmailBatch(
+      [remittance.driver, remittance.conductor]
+        .filter(Boolean)
+        .map((user) => ({
+          send: () =>
+            sendRemittanceStatusEmail({
+              to: user.email,
+              name: fullName(user),
+              status: "rejected",
+              date: remittance.date,
+              busLabel: remittance.BusModel?.bus_number ?? "",
+              reason,
+            }),
+        })),
+      "Remittance rejection email",
+    );
+
     // In-app notifications: the conductor's and driver's bells, then the owner(s).
     await createNotification({
       userId: remittance.conductor_id,
@@ -378,20 +399,6 @@ const rejectRemittance = async (req, res) => {
       });
     }
     notifyOwnersOfReview(remittance, "rejected", auditTellerId, cashReceived);
-
-    for (const user of [remittance.driver, remittance.conductor]) {
-      if (!user) continue;
-      notify(
-        sendRemittanceStatusEmail({
-          to: user.email,
-          name: fullName(user),
-          status: "rejected",
-          date: remittance.date,
-          busLabel: remittance.BusModel?.bus_number ?? "",
-          reason,
-        }),
-      );
-    }
 
     return res.json(remittance);
   } catch (error) {
