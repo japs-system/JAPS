@@ -301,9 +301,15 @@ const updateTripStatus = async (req, res) => {
         where: {
           bus_id: trip.bus_id,
           conductor_id: conductorId,
-          trip_number: { [Op.lt]: trip.trip_number },
           status: "scheduled",
           departure_time: { [Op.gte]: tripDate.start, [Op.lt]: tripDate.endExclusive },
+          [Op.or]: [
+            { departure_time: { [Op.lt]: trip.departure_time } },
+            {
+              departure_time: trip.departure_time,
+              trip_number: { [Op.lt]: trip.trip_number },
+            },
+          ],
         },
       });
 

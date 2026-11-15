@@ -23,7 +23,7 @@ const sendWithRetry = async (send, { attempts = 3, delayMs = 500 } = {}) => {
 
 const sendEmailBatch = async (deliveries, context, logger = console) => {
   const results = await Promise.allSettled(
-    deliveries.map(({ send }) => Promise.resolve().then(send)),
+    deliveries.map(({ send }) => sendWithRetry(send)),
   );
   let sent = 0;
   let failed = 0;

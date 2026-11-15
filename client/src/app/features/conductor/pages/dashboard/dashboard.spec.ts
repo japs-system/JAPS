@@ -47,11 +47,11 @@ describe('ConductorDashboard', () => {
     expect(component.canStartTrip().get(trip.id)).toBe(true);
   });
 
-  it('requires earlier trips on the same bus and Manila service date to be completed first', () => {
+  it('requires earlier departure times on the same bus and Manila service date to be completed first', () => {
     const earlier: Trip = {
       id: 1,
       bus_id: 10,
-      trip_number: 1,
+      trip_number: 5,
       status: 'scheduled',
       departure_time: '2020-01-01T20:00:00.000Z',
       arrival_time: null,
@@ -71,5 +71,24 @@ describe('ConductorDashboard', () => {
 
     component.trips.set([{ ...earlier, status: 'completed' }, later]);
     expect(component.canStartTrip().get(later.id)).toBe(true);
+  });
+
+  it('uses trip number only to break ties when departure times match', () => {
+    const laterNumber: Trip = {
+      id: 1,
+      bus_id: 10,
+      trip_number: 2,
+      status: 'scheduled',
+      departure_time: '2020-01-01T21:00:00.000Z',
+      arrival_time: null,
+      grand_total: 0,
+      ticket_number_start: null,
+      ticket_number_end: null,
+    };
+
+    component.trips.set([laterNumber, { ...laterNumber, id: 2, trip_number: 1 }]);
+
+    expect(component.canStartTrip().get(1)).toBe(false);
+    expect(component.canStartTrip().get(2)).toBe(true);
   });
 });

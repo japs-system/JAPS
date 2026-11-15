@@ -167,7 +167,9 @@ export class ConductorDashboard implements OnInit {
           !!t.departure_time &&
           manilaDateStr(new Date(t.departure_time)) === tripDate &&
           t.bus_id === busId &&
-          t.trip_number < trip.trip_number
+          (new Date(t.departure_time).getTime() < new Date(trip.departure_time).getTime() ||
+            (new Date(t.departure_time).getTime() === new Date(trip.departure_time).getTime() &&
+              t.trip_number < trip.trip_number))
         );
       });
       result.set(trip.id, blockers.length === 0);

@@ -57,9 +57,11 @@ describe('Schedules', () => {
     expect(component.scheduleDate()).toBe('2026-11-08');
   });
 
-  it('does not allow scheduling before today', () => {
-    expect(component.isDepartureAllowed('2000-01-01T23:59')).toBe(false);
-    expect(component.isDepartureAllowed(`${component.minScheduleDateTime}`)).toBe(true);
+  it('allows past dates while keeping the future scheduling limit', () => {
+    expect(component.isDepartureAllowed('2000-01-01T23:59')).toBe(true);
+    expect(component.isDepartureAllowed(component.maxScheduleDateTime)).toBe(true);
+    const yearAfterLimit = Number(component.maxScheduleDate.slice(0, 4)) + 1;
+    expect(component.isDepartureAllowed(`${yearAfterLimit}-01-01T00:00`)).toBe(false);
   });
 
   it('only includes active buses and crew in schedule filters', () => {

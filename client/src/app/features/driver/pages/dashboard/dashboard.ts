@@ -30,6 +30,8 @@ export interface Trip {
   };
 }
 
+type ViewMode = 'card' | 'table';
+
 @Component({
   selector: 'app-driver-dashboard',
   imports: [DatePipe],
@@ -45,6 +47,7 @@ export class DriverDashboard implements OnInit {
 
   trips = signal<Trip[]>([]);
   loading = signal(false);
+  viewMode = signal<ViewMode>('card');
 
   /** Active trips first, then the latest schedules. */
   sortedTrips = computed(() =>

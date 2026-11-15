@@ -66,8 +66,6 @@ const scheduleDepartureError = (departure, now = new Date()) => {
 
   const today = manilaDateKey(now);
   const departureDate = manilaDateKey(parsedDeparture);
-  if (departureDate < today) return "Trips cannot be scheduled before today.";
-
   const currentYear = Number(today.slice(0, 4));
   const lastAllowedYear = (Math.floor(currentYear / 5) + 1) * 5;
   const lastAllowedDate = `${lastAllowedYear}-12-31`;

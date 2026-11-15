@@ -1,5 +1,33 @@
-<div class="mb-6">
+<div class="mb-6 flex items-center justify-between gap-3">
   <h2 class="text-2xl font-bold text-gray-800">Driver Schedule</h2>
+  <div class="hidden sm:flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+    <button
+      type="button"
+      (click)="viewMode.set('card')"
+      class="p-1.5 rounded-md transition-all cursor-pointer"
+      [class.bg-white]="viewMode() === 'card'"
+      [class.shadow-sm]="viewMode() === 'card'"
+      [class.text-gray-800]="viewMode() === 'card'"
+      [class.text-gray-400]="viewMode() !== 'card'"
+      title="Card view"
+      aria-label="Card view"
+    >
+      <i class="pi pi-th-large text-sm"></i>
+    </button>
+    <button
+      type="button"
+      (click)="viewMode.set('table')"
+      class="p-1.5 rounded-md transition-all cursor-pointer"
+      [class.bg-white]="viewMode() === 'table'"
+      [class.shadow-sm]="viewMode() === 'table'"
+      [class.text-gray-800]="viewMode() === 'table'"
+      [class.text-gray-400]="viewMode() !== 'table'"
+      title="Table view"
+      aria-label="Table view"
+    >
+      <i class="pi pi-list text-sm"></i>
+    </button>
+  </div>
 </div>
 
 @if (loading()) {
@@ -16,8 +44,9 @@
     <p class="text-gray-500 text-sm">You currently do not have any trips assigned to your schedule. Please check with the Administrator for dispatch schedules.</p>
   </div>
 } @else {
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-    @for (trip of visibleTrips(); track trip.id) {
+  @if (viewMode() === 'card') {
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      @for (trip of visibleTrips(); track trip.id) {
       <div class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden flex flex-col hover:shadow-lg transition-shadow duration-200">
         <!-- Card Header -->
         <div class="px-5 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
@@ -131,18 +160,87 @@
           }
         </div>
       </div>
-    }
-  </div>
-
-  @if (hasMore()) {
-    <div class="flex justify-center mt-6">
-      <button
-        type="button"
-        (click)="showMore()"
-        class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
-      >
-        Show older trips
-      </button>
+      }
     </div>
+
+    @if (hasMore()) {
+      <div class="flex justify-center mt-6">
+        <button
+          type="button"
+          (click)="showMore()"
+          class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
+        >
+          Show older trips
+        </button>
+      </div>
+    }
+  } @else {
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm whitespace-nowrap">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Trip</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Route</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Departure</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Arrival</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Bus</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Conductor</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            @for (trip of visibleTrips(); track trip.id) {
+              <tr class="hover:bg-gray-50">
+                <td class="px-5 py-3 font-semibold text-gray-800">#{{ trip.trip_number }}</td>
+                <td class="px-5 py-3 text-gray-700">
+                  {{ trip.Route?.origin ?? '—' }} → {{ trip.Route?.destination ?? '—' }}
+                </td>
+                <td class="px-5 py-3 text-gray-700">
+                  {{ trip.departure_time | date: 'MMM d, y h:mm a' }}
+                </td>
+                <td class="px-5 py-3 text-gray-700">
+                  {{ trip.arrival_time ? (trip.arrival_time | date: 'MMM d, y h:mm a') : '—' }}
+                </td>
+                <td class="px-5 py-3 text-gray-700">
+                  {{ trip.BusModel?.bus_number || '—' }}
+                  <span class="text-xs text-gray-400">{{ trip.BusModel?.plate_number || '' }}</span>
+                </td>
+                <td class="px-5 py-3 text-gray-700">
+                  {{ trip.conductor ? trip.conductor.first_name + ' ' + trip.conductor.last_name : '—' }}
+                </td>
+                <td class="px-5 py-3">
+                  <span
+                    class="px-2.5 py-1 text-xs font-bold rounded-full uppercase"
+                    [class.bg-blue-50]="trip.status === 'scheduled'"
+                    [class.text-blue-600]="trip.status === 'scheduled'"
+                    [class.bg-amber-50]="trip.status === 'ongoing'"
+                    [class.text-amber-600]="trip.status === 'ongoing'"
+                    [class.bg-emerald-50]="trip.status === 'completed'"
+                    [class.text-emerald-600]="trip.status === 'completed'"
+                    [class.bg-red-50]="trip.status === 'cancelled'"
+                    [class.text-red-600]="trip.status === 'cancelled'"
+                  >
+                    {{ trip.status }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    @if (hasMore()) {
+      <div class="flex justify-center mt-6">
+        <button
+          type="button"
+          (click)="showMore()"
+          class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
+        >
+          Show older trips
+        </button>
+      </div>
+    }
   }
 }

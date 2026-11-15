@@ -233,17 +233,13 @@ export class Schedules implements OnInit {
     return `${maxYear}-12-31`;
   }
 
-  get minScheduleDateTime(): string {
-    return `${this.today()}T00:00`;
-  }
-
   get maxScheduleDateTime(): string {
     return `${this.maxScheduleDate}T23:59`;
   }
 
   isDepartureAllowed(value: string): boolean {
     const date = value.slice(0, 10);
-    return !!value && date >= this.today() && date <= this.maxScheduleDate;
+    return !!value && date <= this.maxScheduleDate;
   }
 
   /** First day of the current month (YYYY-MM-DD) in Manila time. */
