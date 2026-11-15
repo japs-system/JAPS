@@ -288,4 +288,112 @@ describe('Schedules', () => {
       .flush([]);
     expect(component.showDeleteModal()).toBe(false);
   });
+
+  it('bulk processes selected scheduled and completed trips after confirmation', () => {
+    component.loadTrips();
+    const trips: ScheduleTrip[] = [
+      {
+        id: 201,
+        bus_id: 10,
+        driver_id: 2,
+        conductor_id: 4,
+        route_id: 40,
+        trip_number: 1,
+        departure_time: '2026-11-07T04:00:00.000Z',
+        actual_departure_time: null,
+        arrival_time: null,
+        status: 'scheduled',
+      },
+      {
+        id: 202,
+        bus_id: 10,
+        driver_id: 2,
+        conductor_id: 4,
+        route_id: 40,
+        trip_number: 2,
+        departure_time: '2026-11-07T05:00:00.000Z',
+        actual_departure_time: '2026-11-07T05:00:00.000Z',
+        arrival_time: '2026-11-07T06:00:00.000Z',
+        status: 'completed',
+      },
+    ];
+    httpMock
+      .expectOne(
+        `${environment.apiUrl}/api/buses/trips?startDate=${component.startDate()}&endDate=${component.endDate()}`,
+      )
+      .flush(trips);
+    component.selectedTripIds.set(new Set([201, 202]));
+    component.showBulkDeleteModal.set(true);
+
+    component.deleteSelectedTrips();
+
+    const deletes = httpMock.match((request) => request.method === 'DELETE');
+    expect(deletes.map((request) => request.request.url).sort()).toEqual([
+      `${environment.apiUrl}/api/buses/trips/201`,
+      `${environment.apiUrl}/api/buses/trips/202`,
+    ]);
+    deletes.forEach((request) => request.flush(null));
+    httpMock
+      .expectOne(
+        `${environment.apiUrl}/api/buses/trips?startDate=${component.startDate()}&endDate=${component.endDate()}`,
+      )
+      .flush([]);
+
+    expect(component.showBulkDeleteModal()).toBe(false);
+    expect(component.selectedTripIds().size).toBe(0);
+  });
+
+  it('keeps failed schedule deletions selected and reports partial failures', () => {
+    component.loadTrips();
+    const trips: ScheduleTrip[] = [
+      {
+        id: 301,
+        bus_id: 10,
+        driver_id: 2,
+        conductor_id: 4,
+        route_id: 40,
+        trip_number: 1,
+        departure_time: '2026-11-07T04:00:00.000Z',
+        actual_departure_time: null,
+        arrival_time: null,
+        status: 'scheduled',
+      },
+      {
+        id: 302,
+        bus_id: 10,
+        driver_id: 2,
+        conductor_id: 4,
+        route_id: 40,
+        trip_number: 2,
+        departure_time: '2026-11-07T05:00:00.000Z',
+        actual_departure_time: '2026-11-07T05:00:00.000Z',
+        arrival_time: '2026-11-07T06:00:00.000Z',
+        status: 'completed',
+      },
+    ];
+    httpMock
+      .expectOne(
+        `${environment.apiUrl}/api/buses/trips?startDate=${component.startDate()}&endDate=${component.endDate()}`,
+      )
+      .flush(trips);
+    component.selectedTripIds.set(new Set([301, 302]));
+
+    expect(component.selectedScheduledTripCount()).toBe(1);
+    expect(component.selectedPermanentDeleteCount()).toBe(1);
+    component.showBulkDeleteModal.set(true);
+    component.deleteSelectedTrips();
+
+    httpMock.expectOne(`${environment.apiUrl}/api/buses/trips/301`).flush(null);
+    httpMock
+      .expectOne(`${environment.apiUrl}/api/buses/trips/302`)
+      .flush({ message: 'Trip is linked to a remittance.' }, { status: 409, statusText: 'Conflict' });
+    httpMock
+      .expectOne(
+        `${environment.apiUrl}/api/buses/trips?startDate=${component.startDate()}&endDate=${component.endDate()}`,
+      )
+      .flush([trips[1]]);
+
+    expect(component.showBulkDeleteModal()).toBe(false);
+    expect(component.selectedTripIds()).toEqual(new Set([302]));
+  });
 });

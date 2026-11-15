@@ -2,6 +2,7 @@ import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
+import { catchError, forkJoin, map, of } from 'rxjs';
 import { AlertService } from '../../../../core/services/alert.service';
 import { environment } from '../../../../../environments/environment';
 import { TablePagination } from '../../../../shared/components/table-pagination/table-pagination';
@@ -152,6 +153,25 @@ export class Schedules implements OnInit {
     const start = (this.currentPage() - 1) * this.pageSize();
     return this.filtered().slice(start, start + this.pageSize());
   });
+  selectableTripsOnPage = computed(() =>
+    this.pagedTrips().filter(
+      (trip) => trip.status === 'scheduled' || trip.status === 'completed' || trip.status === 'cancelled',
+    ),
+  );
+  allPageTripsSelected = computed(
+    () =>
+      this.selectableTripsOnPage().length > 0 &&
+      this.selectableTripsOnPage().every((trip) => this.selectedTripIds().has(trip.id)),
+  );
+  selectedTrips = computed(() =>
+    this.allTrips().filter((trip) => this.selectedTripIds().has(trip.id)),
+  );
+  selectedScheduledTripCount = computed(
+    () => this.selectedTrips().filter((trip) => trip.status === 'scheduled').length,
+  );
+  selectedPermanentDeleteCount = computed(
+    () => this.selectedTrips().filter((trip) => trip.status === 'completed' || trip.status === 'cancelled').length,
+  );
   pageNumbers = computed(() => {
     const total = this.totalPages();
     const current = this.currentPage();
@@ -207,6 +227,9 @@ export class Schedules implements OnInit {
   // Delete confirm
   deletingTrip = signal<ScheduleTrip | null>(null);
   showDeleteModal = signal(false);
+  selectedTripIds = signal<Set<number>>(new Set());
+  showBulkDeleteModal = signal(false);
+  deletingTrips = signal(false);
 
   /** Today's date (YYYY-MM-DD) in Manila time. */
   private today(): string {
@@ -271,6 +294,10 @@ export class Schedules implements OnInit {
     this.http.get<ScheduleTrip[]>(url, { withCredentials: true }).subscribe({
       next: (data) => {
         this.allTrips.set(data);
+        const availableIds = new Set(data.map((trip) => trip.id));
+        this.selectedTripIds.update(
+          (selected) => new Set([...selected].filter((id) => availableIds.has(id))),
+        );
         this.currentPage.set(Math.min(this.currentPage(), this.totalPages()));
         this.loading.set(false);
       },
@@ -541,6 +568,78 @@ export class Schedules implements OnInit {
     this.showDeleteModal.set(false);
   }
 
+  toggleTripSelection(id: number): void {
+    this.selectedTripIds.update((selected) => {
+      const next = new Set(selected);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  togglePageTripSelection(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.selectedTripIds.update((selected) => {
+      const next = new Set(selected);
+      for (const trip of this.selectableTripsOnPage()) {
+        if (checked) next.add(trip.id);
+        else next.delete(trip.id);
+      }
+      return next;
+    });
+  }
+
+  clearTripSelection(): void {
+    this.selectedTripIds.set(new Set());
+  }
+
+  cancelBulkDelete(): void {
+    if (!this.deletingTrips()) this.showBulkDeleteModal.set(false);
+  }
+
+  deleteSelectedTrips(): void {
+    const trips = this.selectedTrips();
+    if (trips.length === 0 || this.deletingTrips()) return;
+
+    this.deletingTrips.set(true);
+    forkJoin(
+      trips.map((trip) =>
+        this.http.delete<void>(`${this.BUSES_API}/trips/${trip.id}`, { withCredentials: true }).pipe(
+          map(() => ({ trip, error: null as string | null })),
+          catchError((err) =>
+            of({
+              trip,
+              error: err.error?.message ?? 'Could not delete or cancel trip.',
+            }),
+          ),
+        ),
+      ),
+    ).subscribe((results) => {
+      const completed = results.filter((result) => result.error === null);
+      const failures = results.filter((result) => result.error !== null);
+      const completedIds = new Set(completed.map((result) => result.trip.id));
+      this.selectedTripIds.set(new Set(failures.map((result) => result.trip.id)));
+      this.showBulkDeleteModal.set(false);
+      this.deletingTrips.set(false);
+      this.loadTrips();
+
+      if (failures.length === 0) {
+        const cancelled = completed.filter((result) => result.trip.status === 'scheduled').length;
+        const deleted = completed.length - cancelled;
+        const parts = [];
+        if (cancelled) parts.push(`${cancelled} cancelled`);
+        if (deleted) parts.push(`${deleted} deleted`);
+        this.alertService.success('Schedules updated', parts.join(', ') + '.');
+      } else {
+        const messages = [...new Set(failures.map((result) => result.error))].join(' ');
+        this.alertService.error(
+          'Some schedules could not be deleted',
+          `${completedIds.size} processed; ${failures.length} failed. ${messages}`,
+        );
+      }
+    });
+  }
+
   deleteTrip(): void {
     const trip = this.deletingTrip();
     if (!trip) return;
@@ -548,6 +647,11 @@ export class Schedules implements OnInit {
       next: () => {
         this.alertService.success('Deleted', 'Trip removed.');
         this.showDeleteModal.set(false);
+        this.selectedTripIds.update((selected) => {
+          const next = new Set(selected);
+          next.delete(trip.id);
+          return next;
+        });
         this.loadTrips();
       },
       error: (err) =>

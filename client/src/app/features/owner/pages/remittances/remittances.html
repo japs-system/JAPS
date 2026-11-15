@@ -37,6 +37,30 @@
     </span>
   </div>
 
+  @if (selectedRemittanceIds().size > 0) {
+    <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 bg-red-50 border-b border-red-100">
+      <span class="text-sm font-medium text-red-700">
+        {{ selectedRemittanceIds().size }} remittance{{ selectedRemittanceIds().size !== 1 ? 's' : '' }} selected
+      </span>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="clearRemittanceSelection()"
+          class="px-3 py-1.5 text-sm text-gray-600 hover:bg-white rounded-lg cursor-pointer"
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          (click)="showBulkDeleteConfirmation.set(true)"
+          class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg cursor-pointer"
+        >
+          <i class="pi pi-trash"></i> Delete selected
+        </button>
+      </div>
+    </div>
+  }
+
   @if (loading()) {
     <div class="flex items-center justify-center py-16 text-gray-400">
       <i class="pi pi-spinner pi-spin text-2xl mr-3"></i> Loading remittances...
@@ -58,6 +82,15 @@
       <table class="w-full text-sm whitespace-nowrap">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
+            <th class="px-3 py-3">
+              <input
+                type="checkbox"
+                aria-label="Select remittances on this page"
+                [checked]="allPageRemittancesSelected()"
+                (change)="togglePageRemittanceSelection($event)"
+                class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+              />
+            </th>
             <th
               (click)="setSort('date')"
               class="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-[#1E5AAA] select-none"
@@ -138,6 +171,15 @@
               [routerLink]="['/owner/remittances', remit.id]"
               class="hover:bg-gray-50 transition-colors cursor-pointer"
             >
+              <td class="px-3 py-3" (click)="$event.stopPropagation()">
+                <input
+                  type="checkbox"
+                  [attr.aria-label]="'Select remittance from ' + remit.date"
+                  [checked]="selectedRemittanceIds().has(remit.id)"
+                  (change)="toggleRemittanceSelection(remit.id)"
+                  class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                />
+              </td>
               <td class="px-3 py-3 text-gray-800 font-medium">
                 {{ remit.date | date: 'MMM dd, yyyy' }}
               </td>
@@ -268,6 +310,40 @@
           class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer disabled:opacity-50"
         >
           {{ deleting() ? 'Deleting...' : 'Delete' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (showBulkDeleteConfirmation()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cancelBulkDelete()"></div>
+    <div class="relative bg-white rounded-lg shadow-2xl w-full max-w-sm p-8 text-center">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
+        <i class="pi pi-trash text-red-500 text-2xl"></i>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete Selected Remittances?</h3>
+      <p class="text-gray-500 text-sm mb-6">
+        Permanently delete {{ selectedRemittanceIds().size }} selected remittance{{ selectedRemittanceIds().size !== 1 ? 's' : '' }}?
+        This cannot be undone. Trip history will be kept and unlinked from the remittances.
+      </p>
+      <div class="flex gap-3">
+        <button
+          type="button"
+          (click)="cancelBulkDelete()"
+          [disabled]="bulkDeleting()"
+          class="flex-1 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          (click)="deleteSelectedRemittances()"
+          [disabled]="bulkDeleting() || selectedRemittanceIds().size === 0"
+          class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {{ bulkDeleting() ? 'Deleting...' : 'Delete selected' }}
         </button>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { CurrencyPipe, DatePipe } from '@angular/common';
+import { catchError, forkJoin, map, of } from 'rxjs';
 import { environment } from '../../../../../environments/environment';
 import { AlertService } from '../../../../core/services/alert.service';
 import { TablePagination } from '../../../../shared/components/table-pagination/table-pagination';
@@ -46,6 +47,9 @@ export class Remittances implements OnInit {
   loading = signal(false);
   deletingRemittance = signal<Remittance | null>(null);
   deleting = signal(false);
+  selectedRemittanceIds = signal<Set<number>>(new Set());
+  showBulkDeleteConfirmation = signal(false);
+  bulkDeleting = signal(false);
 
   search = signal('');
   statusFilter = signal<string>('all');
@@ -103,6 +107,11 @@ export class Remittances implements OnInit {
     const start = (this.currentPage() - 1) * this.pageSize();
     return this.sorted().slice(start, start + this.pageSize());
   });
+  allPageRemittancesSelected = computed(
+    () =>
+      this.paged().length > 0 &&
+      this.paged().every((remittance) => this.selectedRemittanceIds().has(remittance.id)),
+  );
   pageNumbers = computed(() => {
     const total = this.totalPages();
     const cur = this.currentPage();
@@ -126,6 +135,10 @@ export class Remittances implements OnInit {
     this.http.get<Remittance[]>(`${this.API}/remittances`, { withCredentials: true }).subscribe({
       next: (data) => {
         this.allRemittances.set(data);
+        const availableIds = new Set(data.map((remittance) => remittance.id));
+        this.selectedRemittanceIds.update(
+          (selected) => new Set([...selected].filter((id) => availableIds.has(id))),
+        );
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -172,6 +185,73 @@ export class Remittances implements OnInit {
     this.deletingRemittance.set(remittance);
   }
 
+  toggleRemittanceSelection(id: number): void {
+    this.selectedRemittanceIds.update((selected) => {
+      const next = new Set(selected);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  togglePageRemittanceSelection(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.selectedRemittanceIds.update((selected) => {
+      const next = new Set(selected);
+      for (const remittance of this.paged()) {
+        if (checked) next.add(remittance.id);
+        else next.delete(remittance.id);
+      }
+      return next;
+    });
+  }
+
+  clearRemittanceSelection(): void {
+    this.selectedRemittanceIds.set(new Set());
+  }
+
+  cancelBulkDelete(): void {
+    if (!this.bulkDeleting()) this.showBulkDeleteConfirmation.set(false);
+  }
+
+  deleteSelectedRemittances(): void {
+    const ids = [...this.selectedRemittanceIds()];
+    if (ids.length === 0 || this.bulkDeleting()) return;
+
+    this.bulkDeleting.set(true);
+    forkJoin(
+      ids.map((id) =>
+        this.http.delete<void>(`${this.API}/remittances/${id}`, { withCredentials: true }).pipe(
+          map(() => ({ id, error: null as string | null })),
+          catchError((err) =>
+            of({
+              id,
+              error: err.error?.message ?? 'Could not delete remittance.',
+            }),
+          ),
+        ),
+      ),
+    ).subscribe((results) => {
+      const deleted = new Set(results.filter((result) => result.error === null).map((result) => result.id));
+      const failures = results.filter((result) => result.error !== null);
+      this.allRemittances.update((items) => items.filter((item) => !deleted.has(item.id)));
+      this.selectedRemittanceIds.set(new Set(failures.map((failure) => failure.id)));
+      this.showBulkDeleteConfirmation.set(false);
+      this.bulkDeleting.set(false);
+      this.currentPage.set(Math.min(this.currentPage(), this.totalPages()));
+
+      if (failures.length === 0) {
+        this.alertService.success('Deleted', `${deleted.size} remittance${deleted.size === 1 ? '' : 's'} deleted.`);
+      } else {
+        const messages = [...new Set(failures.map((failure) => failure.error))].join(' ');
+        this.alertService.error(
+          'Some remittances could not be deleted',
+          `${deleted.size} deleted; ${failures.length} failed. ${messages}`,
+        );
+      }
+    });
+  }
+
   cancelDelete(): void {
     if (!this.deleting()) this.deletingRemittance.set(null);
   }
@@ -186,6 +266,11 @@ export class Remittances implements OnInit {
       .subscribe({
         next: () => {
           this.allRemittances.update((items) => items.filter((item) => item.id !== remittance.id));
+          this.selectedRemittanceIds.update((selected) => {
+            const next = new Set(selected);
+            next.delete(remittance.id);
+            return next;
+          });
           this.alertService.success('Deleted', 'Remittance deleted.');
           this.deletingRemittance.set(null);
           this.deleting.set(false);

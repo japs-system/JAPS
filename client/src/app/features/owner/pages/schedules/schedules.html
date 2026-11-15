@@ -78,6 +78,30 @@
   </span>
 </div>
 
+@if (selectedTripIds().size > 0) {
+  <div class="bg-red-50 border border-red-100 rounded-lg px-5 py-3 mb-4 flex flex-wrap items-center justify-between gap-3">
+    <span class="text-sm font-medium text-red-700">
+      {{ selectedTripIds().size }} trip{{ selectedTripIds().size !== 1 ? 's' : '' }} selected
+    </span>
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        (click)="clearTripSelection()"
+        class="px-3 py-1.5 text-sm text-gray-600 hover:bg-white rounded-lg cursor-pointer"
+      >
+        Clear
+      </button>
+      <button
+        type="button"
+        (click)="showBulkDeleteModal.set(true)"
+        class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg cursor-pointer"
+      >
+        <i class="pi pi-trash"></i> Delete selected
+      </button>
+    </div>
+  </div>
+}
+
 <!-- Schedule table -->
 <div class="bg-white rounded-lg shadow-sm overflow-hidden">
   @if (loading()) {
@@ -94,6 +118,15 @@
     <table class="w-full text-sm whitespace-nowrap">
       <thead class="bg-gray-50 border-b border-gray-200">
         <tr>
+          <th class="px-3 py-3">
+            <input
+              type="checkbox"
+              aria-label="Select deletable trips on this page"
+              [checked]="allPageTripsSelected()"
+              (change)="togglePageTripSelection($event)"
+              class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+            />
+          </th>
           <th
             class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider"
           >
@@ -139,6 +172,17 @@
       <tbody class="divide-y divide-gray-100">
         @for (trip of pagedTrips(); track trip.id) {
           <tr class="hover:bg-gray-50 transition-colors">
+            <td class="px-3 py-3">
+              @if (trip.status === 'scheduled' || trip.status === 'completed' || trip.status === 'cancelled') {
+                <input
+                  type="checkbox"
+                  [attr.aria-label]="'Select trip ' + trip.trip_number"
+                  [checked]="selectedTripIds().has(trip.id)"
+                  (change)="toggleTripSelection(trip.id)"
+                  class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                />
+              }
+            </td>
             <td class="px-5 py-3 font-medium text-gray-800">{{ trip.trip_number }}</td>
             <td class="px-5 py-3 text-gray-600">
               @if (trip.BusModel) {
@@ -504,6 +548,45 @@
           class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer"
         >
           {{ deletingTrip()?.status === 'scheduled' ? 'Cancel Trip' : 'Delete Trip' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (showBulkDeleteModal()) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="cancelBulkDelete()"></div>
+    <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md p-8 text-center">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
+        <i class="pi pi-trash text-red-500 text-2xl"></i>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-2">Confirm Schedule Changes</h3>
+      <p class="text-gray-500 text-sm mb-6">
+        @if (selectedScheduledTripCount() > 0) {
+          {{ selectedScheduledTripCount() }} scheduled trip{{ selectedScheduledTripCount() !== 1 ? 's' : '' }} will be cancelled and kept in history.
+        }
+        @if (selectedPermanentDeleteCount() > 0) {
+          {{ selectedPermanentDeleteCount() }} completed or cancelled trip{{ selectedPermanentDeleteCount() !== 1 ? 's' : '' }} will be permanently deleted with its tickets and passenger counts. This cannot be undone.
+        }
+        Trips linked to a remittance cannot be deleted.
+      </p>
+      <div class="flex gap-3">
+        <button
+          type="button"
+          (click)="cancelBulkDelete()"
+          [disabled]="deletingTrips()"
+          class="flex-1 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          (click)="deleteSelectedTrips()"
+          [disabled]="deletingTrips() || selectedTrips().length === 0"
+          class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {{ deletingTrips() ? 'Processing...' : 'Confirm' }}
         </button>
       </div>
     </div>
