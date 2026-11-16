@@ -43,6 +43,63 @@ describe('Schedules', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('hides row checkboxes until selection mode and selects all deletable filtered trips', () => {
+    component.loadTrips();
+    const trips: ScheduleTrip[] = [
+      {
+        id: 401,
+        bus_id: 10,
+        driver_id: 2,
+        conductor_id: 4,
+        route_id: 40,
+        trip_number: 1,
+        departure_time: '2026-11-07T04:00:00.000Z',
+        actual_departure_time: null,
+        arrival_time: null,
+        status: 'scheduled',
+      },
+      {
+        id: 402,
+        bus_id: 10,
+        driver_id: 2,
+        conductor_id: 4,
+        route_id: 40,
+        trip_number: 2,
+        departure_time: '2026-11-07T05:00:00.000Z',
+        actual_departure_time: '2026-11-07T05:00:00.000Z',
+        arrival_time: '2026-11-07T06:00:00.000Z',
+        status: 'completed',
+      },
+      {
+        id: 403,
+        bus_id: 10,
+        driver_id: 2,
+        conductor_id: 4,
+        route_id: 40,
+        trip_number: 3,
+        departure_time: '2026-11-07T07:00:00.000Z',
+        actual_departure_time: '2026-11-07T07:00:00.000Z',
+        arrival_time: null,
+        status: 'ongoing',
+      },
+    ];
+    httpMock
+      .expectOne(
+        `${environment.apiUrl}/api/buses/trips?startDate=${component.startDate()}&endDate=${component.endDate()}`,
+      )
+      .flush(trips);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('tbody input[type="checkbox"]').length).toBe(0);
+
+    component.selectionMode.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('tbody input[type="checkbox"]').length).toBe(2);
+
+    component.selectAllTrips();
+    expect(component.selectedTripIds()).toEqual(new Set([401, 402]));
+  });
+
   it('only offers active drivers and conductors for new schedules', () => {
     expect(component.drivers().map((user) => user.id)).toEqual([2]);
     expect(component.conductors().map((user) => user.id)).toEqual([4]);

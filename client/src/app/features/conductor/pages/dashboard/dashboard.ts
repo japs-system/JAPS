@@ -27,7 +27,7 @@ export interface Trip {
   driver?: { id: number; first_name: string; last_name: string; employee_id: string };
 }
 
-type TripTab = 'today' | 'all';
+type TripTab = 'today' | 'all' | 'archive';
 type ViewMode = 'card' | 'table';
 
 /** Formats a date as YYYY-MM-DD in the schedule's Manila timezone. */
@@ -83,19 +83,43 @@ export class ConductorDashboard implements OnInit {
       ),
   );
 
-  // Keep the active trip at the top, then show the latest schedules first.
+  isArchivedTrip(trip: Trip): boolean {
+    return (
+      (trip.status === 'completed' || trip.status === 'cancelled') &&
+      !!trip.departure_time &&
+      manilaDateStr(new Date(trip.departure_time)) < this.todayStr
+    );
+  }
+
+  archivedTrips = computed(() =>
+    this.trips()
+      .filter((trip) => this.isArchivedTrip(trip))
+      .sort(
+        (a, b) =>
+          new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() ||
+          b.id - a.id,
+      ),
+  );
+
+  // Keep the active trip at the top, then show non-archived schedules first.
   allTrips = computed(() =>
-    [...this.trips()].sort(
-      (a, b) =>
-        Number(b.status === 'ongoing') - Number(a.status === 'ongoing') ||
-        new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() ||
-        b.id - a.id,
-    ),
+    this.trips()
+      .filter((trip) => !this.isArchivedTrip(trip))
+      .sort(
+        (a, b) =>
+          Number(b.status === 'ongoing') - Number(a.status === 'ongoing') ||
+          new Date(b.departure_time).getTime() - new Date(a.departure_time).getTime() ||
+          b.id - a.id,
+      ),
   );
 
   // Tab-scoped list before search/filter
   private tabTrips = computed(() =>
-    this.activeTab() === 'today' ? this.todayTrips() : this.allTrips(),
+    this.activeTab() === 'today'
+      ? this.todayTrips()
+      : this.activeTab() === 'archive'
+        ? this.archivedTrips()
+        : this.allTrips(),
   );
 
   // Search + status filter applied on top of the active tab

@@ -91,4 +91,40 @@ describe('ConductorDashboard', () => {
     expect(component.canStartTrip().get(1)).toBe(false);
     expect(component.canStartTrip().get(2)).toBe(true);
   });
+
+  it('separates past completed and cancelled trips into the archive tab', () => {
+    const archived: Trip = {
+      id: 10,
+      bus_id: 1,
+      trip_number: 1,
+      status: 'completed',
+      departure_time: '2020-01-01T20:00:00.000Z',
+      arrival_time: null,
+      grand_total: 0,
+      ticket_number_start: null,
+      ticket_number_end: null,
+    };
+    const pastScheduled: Trip = {
+      ...archived,
+      id: 11,
+      trip_number: 2,
+      status: 'scheduled',
+    };
+    const currentCancelled: Trip = {
+      ...archived,
+      id: 12,
+      trip_number: 3,
+      status: 'cancelled',
+      departure_time: new Date().toISOString(),
+    };
+    component.trips.set([archived, pastScheduled, currentCancelled]);
+
+    expect(component.archivedTrips().map((trip) => trip.id)).toEqual([10]);
+    expect(component.allTrips().map((trip) => trip.id)).toContain(11);
+    expect(component.allTrips().map((trip) => trip.id)).toContain(12);
+    expect(component.allTrips().map((trip) => trip.id)).not.toContain(10);
+
+    component.activeTab.set('archive');
+    expect(component.filteredTrips().map((trip) => trip.id)).toEqual([10]);
+  });
 });

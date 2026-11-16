@@ -97,7 +97,6 @@ export class Dashboard implements OnInit {
 
   loading = signal(true);
   dash = signal<DashboardData | null>(null);
-  insights = computed(() => this.dash()?.insights ?? []);
   fore = signal<ForecastData | null>(null);
 
   // ── Date range filter ─────────────────────────────────────────────────
@@ -229,12 +228,6 @@ export class Dashboard implements OnInit {
     Math.max(...this.dailyPassengerBars().map((b) => b.value), 1),
   );
 
-  /** Route whose stop breakdown is open (null = all collapsed). */
-  expandedRoute = signal<number | null>(null);
-  toggleRoute(id: number): void {
-    this.expandedRoute.set(this.expandedRoute() === id ? null : id);
-  }
-
   /**
    * Routes with their stops. Every stop that has passengers or revenue is kept
    * (no cap), sorted by revenue so the biggest earners come first.
@@ -287,10 +280,10 @@ export class Dashboard implements OnInit {
       }))
       .filter((r) => r.total > 0 && r.hour >= 4 && r.hour <= 21)
       .sort((a, b) => b.total - a.total)
-      .slice(0, 8);
+      .slice(0, 4);
   });
 
-  /** Peak Hours list: busiest hours of the range, each rated against the busiest one. */
+  /** Peak Hours list: four busiest hours of the range, rated against the busiest one. */
   peakHoursList = computed(() => {
     const rows = this.peakHoursTop();
     const max = Math.max(...rows.map((r) => r.avg), 0);
@@ -299,12 +292,6 @@ export class Dashboard implements OnInit {
       return { hour: r.hour, avg: r.avg, pct: share * 100, level: this.peakLevelByShare(share) };
     });
   });
-
-  /** Peak Hours card: only the busiest hour shows until the other peak hours are expanded. */
-  peakHoursOpen = signal(false);
-
-  /** Remittances KPI card: approved revenue / cash received are hidden until expanded. */
-  remittanceOpen = signal(false);
 
   /** Daily total revenue of approved remittances across the selected range (weekend flagged). */
   remittanceDailyBars = computed(() => {
@@ -411,9 +398,6 @@ export class Dashboard implements OnInit {
   private readonly CHART_W = 500;
   private readonly CHART_H = 120;
 
-  /** Index of the day under the cursor (null when not hovering). */
-  hoverIndex = signal<number | null>(null);
-
   private localKey(d: Date): string {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -490,6 +474,9 @@ export class Dashboard implements OnInit {
   hasChartData = computed(() =>
     this.chartSeries().some((p) => p.type === 'actual' && (p.passengers > 0 || (p.revenue ?? 0) > 0)),
   );
+  hasRevenueChartData = computed(() =>
+    this.chartSeries().some((p) => p.type === 'actual' && (p.revenue ?? 0) > 0),
+  );
 
   rangeTitle = computed(() => {
     const d = this.dash();
@@ -521,7 +508,7 @@ export class Dashboard implements OnInit {
   maxPassengers = computed(() => Math.max(...this.allDemandValues(), 1));
   maxRevenue = computed(() => Math.max(...this.chartSeries().map((p) => p.revenue ?? 0), 1));
 
-  /** One entry per day: passengers + revenue, with SVG coordinates and % positions for hover markers. */
+  /** One entry per day with independent passenger and revenue chart coordinates. */
   demandPoints = computed(() => {
     const series = this.chartSeries();
     const n = series.length;
@@ -574,8 +561,14 @@ export class Dashboard implements OnInit {
     this.linePoints('yR', Math.max(this.splitIndex() - 1, 0), this.demandPoints().length),
   );
 
-  hovered = computed(() => {
-    const i = this.hoverIndex();
+  passengerHoverIndex = signal<number | null>(null);
+  revenueHoverIndex = signal<number | null>(null);
+  passengerHovered = computed(() => {
+    const i = this.passengerHoverIndex();
+    return i === null ? null : (this.demandPoints()[i] ?? null);
+  });
+  revenueHovered = computed(() => {
+    const i = this.revenueHoverIndex();
     return i === null ? null : (this.demandPoints()[i] ?? null);
   });
 
@@ -631,6 +624,112 @@ export class Dashboard implements OnInit {
     const n = this.growthNum(val);
     return n === null ? '' : `${Math.abs(n).toFixed(1)}%`;
   }
+
+  private trendInsight(
+    title: string,
+    noun: string,
+    current: number,
+    previous: number,
+    currency = false,
+    comparison = 'previous day',
+  ): DashboardInsight {
+    const change = current - previous;
+    const tone: InsightTone = change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral';
+    const format = (value: number) =>
+      currency
+        ? new Intl.NumberFormat('en-PH', {
+            style: 'currency',
+            currency: 'PHP',
+            maximumFractionDigits: 0,
+          }).format(value)
+        : `${value.toLocaleString()} ${noun}`;
+    const message =
+      change === 0
+        ? `${format(current)}; unchanged from the ${comparison}.`
+        : previous !== 0
+          ? `${format(current)}, ${Math.abs((change / previous) * 100).toFixed(1)}% ${change > 0 ? 'higher' : 'lower'} than the ${comparison} (${format(previous)}).`
+          : `${format(current)}, ${change > 0 ? 'up' : 'down'} from zero on the ${comparison}.`;
+
+    return { tone, title, message };
+  }
+
+  insights = computed(() => {
+    const series = this.chartSeries();
+    const actual = series.filter((point) => point.type === 'actual');
+    const forecast = series.find((point) => point.type === 'forecast');
+    const result: DashboardInsight[] = [];
+
+    if (actual.length >= 2) {
+      const previous = actual[actual.length - 2];
+      const current = actual[actual.length - 1];
+      result.push(
+        this.trendInsight('Passenger trend', 'passengers', current.passengers, previous.passengers),
+      );
+      if (current.revenue !== null && previous.revenue !== null) {
+        result.push(
+          this.trendInsight('Revenue trend', 'revenue', current.revenue, previous.revenue, true),
+        );
+      }
+      if (forecast) {
+        result.push(
+          this.trendInsight(
+            'Passenger forecast',
+            'passengers',
+            forecast.passengers,
+            current.passengers,
+            false,
+            'latest actual day',
+          ),
+        );
+        if (forecast.revenue !== null && current.revenue !== null) {
+          result.push(
+            this.trendInsight(
+              'Revenue forecast',
+              'revenue',
+              forecast.revenue,
+              current.revenue,
+              true,
+              'latest actual day',
+            ),
+          );
+        }
+      }
+    }
+
+    const topRoute = [...this.routeBars()].sort((a, b) => b.revenue - a.revenue)[0];
+    if (topRoute) {
+      const revenue = new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP',
+        maximumFractionDigits: 0,
+      }).format(topRoute.revenue);
+      result.push({
+        tone: 'neutral',
+        title: 'Top route',
+        message: `${topRoute.label} earned ${revenue} from ${topRoute.trips} trips.`,
+      });
+    }
+
+    const busiestHour = this.peakHoursList()[0];
+    if (busiestHour) {
+      result.push({
+        tone: 'neutral',
+        title: 'Peak hour',
+        message: `${this.peakLabel(busiestHour.hour)} is the busiest boarding hour, averaging ${busiestHour.avg.toFixed(1)} passengers per hour.`,
+      });
+    }
+
+    const busiestDay = [...this.dayOfWeekBars()].sort((a, b) => b.value - a.value)[0];
+    if (busiestDay?.value) {
+      result.push({
+        tone: 'neutral',
+        title: 'Busiest day',
+        message: `${busiestDay.label} averages ${busiestDay.value.toLocaleString()} passengers.`,
+      });
+    }
+
+    return result;
+  });
 
   insightStyle(tone: InsightTone) {
     return INSIGHT_STYLES[tone] ?? INSIGHT_STYLES.neutral;

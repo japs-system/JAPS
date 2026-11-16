@@ -48,6 +48,7 @@ export class Remittances implements OnInit {
   deletingRemittance = signal<Remittance | null>(null);
   deleting = signal(false);
   selectedRemittanceIds = signal<Set<number>>(new Set());
+  selectionMode = signal(false);
   showBulkDeleteConfirmation = signal(false);
   bulkDeleting = signal(false);
 
@@ -107,11 +108,6 @@ export class Remittances implements OnInit {
     const start = (this.currentPage() - 1) * this.pageSize();
     return this.sorted().slice(start, start + this.pageSize());
   });
-  allPageRemittancesSelected = computed(
-    () =>
-      this.paged().length > 0 &&
-      this.paged().every((remittance) => this.selectedRemittanceIds().has(remittance.id)),
-  );
   pageNumbers = computed(() => {
     const total = this.totalPages();
     const cur = this.currentPage();
@@ -139,6 +135,7 @@ export class Remittances implements OnInit {
         this.selectedRemittanceIds.update(
           (selected) => new Set([...selected].filter((id) => availableIds.has(id))),
         );
+        if (this.selectedRemittanceIds().size === 0) this.selectionMode.set(false);
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -194,20 +191,17 @@ export class Remittances implements OnInit {
     });
   }
 
-  togglePageRemittanceSelection(event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked;
+  selectAllRemittances(): void {
     this.selectedRemittanceIds.update((selected) => {
       const next = new Set(selected);
-      for (const remittance of this.paged()) {
-        if (checked) next.add(remittance.id);
-        else next.delete(remittance.id);
-      }
+      for (const remittance of this.sorted()) next.add(remittance.id);
       return next;
     });
   }
 
   clearRemittanceSelection(): void {
     this.selectedRemittanceIds.set(new Set());
+    this.selectionMode.set(false);
   }
 
   cancelBulkDelete(): void {
@@ -236,6 +230,7 @@ export class Remittances implements OnInit {
       const failures = results.filter((result) => result.error !== null);
       this.allRemittances.update((items) => items.filter((item) => !deleted.has(item.id)));
       this.selectedRemittanceIds.set(new Set(failures.map((failure) => failure.id)));
+      this.selectionMode.set(failures.length > 0);
       this.showBulkDeleteConfirmation.set(false);
       this.bulkDeleting.set(false);
       this.currentPage.set(Math.min(this.currentPage(), this.totalPages()));

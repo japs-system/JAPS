@@ -73,6 +73,20 @@
         >{{ allTrips().length }}</span
       >
     </button>
+    <button
+      (click)="activeTab.set('archive')"
+      class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+      [class.bg-white]="activeTab() === 'archive'"
+      [class.shadow-sm]="activeTab() === 'archive'"
+      [class.text-gray-800]="activeTab() === 'archive'"
+      [class.text-gray-500]="activeTab() !== 'archive'"
+    >
+      <i class="pi pi-folder text-xs"></i>
+      Archive
+      <span class="bg-gray-300 text-gray-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+        {{ archivedTrips().length }}
+      </span>
+    </button>
   </div>
 
   <!-- Search -->
@@ -90,6 +104,7 @@
   <!-- Status filter -->
   <select
     (change)="onStatusFilter($event)"
+    [value]="statusFilter()"
     class="w-full sm:w-auto text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white text-gray-600"
   >
     <option value="">All Statuses</option>
@@ -113,7 +128,13 @@
   <div class="bg-white rounded-2xl p-10 text-center shadow-sm border border-gray-100">
     <i class="pi pi-calendar text-4xl text-gray-300 mb-3 block"></i>
     <h3 class="text-base font-bold text-gray-800 mb-1">
-      {{ activeTab() === 'today' ? 'No Trips Today' : 'No Assigned Trips' }}
+      {{
+        activeTab() === 'today'
+          ? 'No Trips Today'
+          : activeTab() === 'archive'
+            ? 'No Archived Trips'
+            : 'No Assigned Trips'
+      }}
     </h3>
     <p class="text-gray-400 text-sm">
       {{
@@ -121,7 +142,9 @@
           ? 'No trips match your filters.'
           : activeTab() === 'today'
             ? 'You have no trips scheduled for today.'
-            : 'Contact the Administrator for trip assignment.'
+            : activeTab() === 'archive'
+              ? 'Completed or cancelled trips from previous dates will appear here.'
+              : 'Contact the Administrator for trip assignment.'
       }}
     </p>
   </div>

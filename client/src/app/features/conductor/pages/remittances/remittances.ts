@@ -94,7 +94,7 @@ const EXPENSE_CONTROLS: Record<string, string> = {
 
 // Expense inputs shown on the remittance forms, in display order.
 const EXPENSE_FIELDS = [
-  { ctrl: 'exp_officer', label: 'Officer / Police' },
+  { ctrl: 'exp_officer', label: 'Officer' },
   { ctrl: 'exp_toll_fees', label: 'Toll Fees' },
   { ctrl: 'exp_parking', label: 'Parking' },
   { ctrl: 'exp_ppa', label: 'PPA (Port Authority)' },

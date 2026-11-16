@@ -153,15 +153,10 @@ export class Schedules implements OnInit {
     const start = (this.currentPage() - 1) * this.pageSize();
     return this.filtered().slice(start, start + this.pageSize());
   });
-  selectableTripsOnPage = computed(() =>
-    this.pagedTrips().filter(
+  selectableTrips = computed(() =>
+    this.filtered().filter(
       (trip) => trip.status === 'scheduled' || trip.status === 'completed' || trip.status === 'cancelled',
     ),
-  );
-  allPageTripsSelected = computed(
-    () =>
-      this.selectableTripsOnPage().length > 0 &&
-      this.selectableTripsOnPage().every((trip) => this.selectedTripIds().has(trip.id)),
   );
   selectedTrips = computed(() =>
     this.allTrips().filter((trip) => this.selectedTripIds().has(trip.id)),
@@ -228,6 +223,7 @@ export class Schedules implements OnInit {
   deletingTrip = signal<ScheduleTrip | null>(null);
   showDeleteModal = signal(false);
   selectedTripIds = signal<Set<number>>(new Set());
+  selectionMode = signal(false);
   showBulkDeleteModal = signal(false);
   deletingTrips = signal(false);
 
@@ -298,6 +294,7 @@ export class Schedules implements OnInit {
         this.selectedTripIds.update(
           (selected) => new Set([...selected].filter((id) => availableIds.has(id))),
         );
+        if (this.selectedTripIds().size === 0) this.selectionMode.set(false);
         this.currentPage.set(Math.min(this.currentPage(), this.totalPages()));
         this.loading.set(false);
       },
@@ -577,20 +574,17 @@ export class Schedules implements OnInit {
     });
   }
 
-  togglePageTripSelection(event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked;
+  selectAllTrips(): void {
     this.selectedTripIds.update((selected) => {
       const next = new Set(selected);
-      for (const trip of this.selectableTripsOnPage()) {
-        if (checked) next.add(trip.id);
-        else next.delete(trip.id);
-      }
+      for (const trip of this.selectableTrips()) next.add(trip.id);
       return next;
     });
   }
 
   clearTripSelection(): void {
     this.selectedTripIds.set(new Set());
+    this.selectionMode.set(false);
   }
 
   cancelBulkDelete(): void {
@@ -619,6 +613,7 @@ export class Schedules implements OnInit {
       const failures = results.filter((result) => result.error !== null);
       const completedIds = new Set(completed.map((result) => result.trip.id));
       this.selectedTripIds.set(new Set(failures.map((result) => result.trip.id)));
+      this.selectionMode.set(failures.length > 0);
       this.showBulkDeleteModal.set(false);
       this.deletingTrips.set(false);
       this.loadTrips();
