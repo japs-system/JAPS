@@ -68,6 +68,8 @@ export class ConductorDashboard implements OnInit {
 
   // Today's date string for comparison (local calendar date)
   private todayStr = manilaDateStr(new Date());
+  // Current month as YYYY-MM (Manila) — the "All" tab shows every trip in this month.
+  private monthStr = this.todayStr.slice(0, 7);
 
   // Keep the active trip at the top, then show today's remaining trips by departure time.
   todayTrips = computed(() =>
@@ -101,10 +103,15 @@ export class ConductorDashboard implements OnInit {
       ),
   );
 
-  // Keep the active trip at the top, then show non-archived schedules first.
+  // Every trip of the current month, whatever its status (scheduled, ongoing, completed,
+  // cancelled). The active trip stays at the top, then newest first.
   allTrips = computed(() =>
     this.trips()
-      .filter((trip) => !this.isArchivedTrip(trip))
+      .filter(
+        (trip) =>
+          !!trip.departure_time &&
+          manilaDateStr(new Date(trip.departure_time)).slice(0, 7) === this.monthStr,
+      )
       .sort(
         (a, b) =>
           Number(b.status === 'ongoing') - Number(a.status === 'ongoing') ||

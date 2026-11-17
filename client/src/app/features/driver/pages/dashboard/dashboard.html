@@ -1,5 +1,5 @@
-<div class="mb-6 flex items-center justify-between gap-3">
-  <h2 class="text-2xl font-bold text-gray-800">Driver Schedule</h2>
+<div class="mb-4 flex items-center justify-between gap-3">
+  <h2 class="text-xl font-semibold text-gray-800">Driver Schedule</h2>
   <div class="hidden sm:flex items-center gap-1 bg-gray-100 rounded-lg p-1">
     <button
       type="button"
@@ -45,18 +45,76 @@
   </div>
 } @else {
   <div class="flex flex-wrap items-center gap-3 mb-4">
+    <!-- Tabs -->
     <div class="flex gap-1 bg-gray-100 rounded-xl p-1">
       <button
         type="button"
-        (click)="setTab('schedule')"
-        class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer"
-        [class.bg-white]="activeTab() === 'schedule'"
-        [class.shadow-sm]="activeTab() === 'schedule'"
-        [class.text-gray-800]="activeTab() === 'schedule'"
-        [class.text-gray-500]="activeTab() !== 'schedule'"
+        (click)="setTab('today')"
+        class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+        [class.bg-white]="activeTab() === 'today'"
+        [class.shadow-sm]="activeTab() === 'today'"
+        [class.text-gray-800]="activeTab() === 'today'"
+        [class.text-gray-500]="activeTab() !== 'today'"
       >
-        Schedule
+        <i class="pi pi-calendar-clock text-xs"></i>
+        Today
+        @if (scheduledTodayCount() > 0) {
+          <span class="bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">{{
+            scheduledTodayCount()
+          }}</span>
+        }
+        @if (ongoingCount() > 0) {
+          <span
+            class="bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none animate-pulse"
+            >{{ ongoingCount() }}</span
+          >
+        }
       </button>
+      <button
+        type="button"
+        (click)="setTab('all')"
+        class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+        [class.bg-white]="activeTab() === 'all'"
+        [class.shadow-sm]="activeTab() === 'all'"
+        [class.text-gray-800]="activeTab() === 'all'"
+        [class.text-gray-500]="activeTab() !== 'all'"
+      >
+        <i class="pi pi-history text-xs"></i>
+        All
+        <span class="bg-gray-300 text-gray-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">{{
+          allTrips().length
+        }}</span>
+      </button>
+    </div>
+
+    <!-- Search -->
+    <div class="relative flex-1 min-w-[220px]">
+      <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+      <input
+        type="search"
+        placeholder="Search route, bus, conductor..."
+        [value]="search()"
+        (input)="onSearch($event)"
+        class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-gray-400"
+      />
+    </div>
+
+    <!-- Status filter -->
+    <select
+      [value]="statusFilter()"
+      (change)="onStatusFilter($event)"
+      aria-label="Filter trips by status"
+      class="w-full sm:w-auto text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-emerald-500 bg-white text-gray-600"
+    >
+      <option value="">All Statuses</option>
+      <option value="scheduled">Scheduled</option>
+      <option value="ongoing">Ongoing</option>
+      <option value="completed">Completed</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+
+    <!-- Archive — sits after the status filter -->
+    <div class="flex gap-1 bg-gray-100 rounded-xl p-1">
       <button
         type="button"
         (click)="setTab('archive')"
@@ -73,49 +131,36 @@
         </span>
       </button>
     </div>
-    <div class="relative flex-1 min-w-[220px]">
-      <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-      <input
-        type="search"
-        placeholder="Search route, bus, conductor..."
-        [value]="search()"
-        (input)="onSearch($event)"
-        class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-gray-400"
-      />
-    </div>
-    <select
-      [value]="statusFilter()"
-      (change)="onStatusFilter($event)"
-      aria-label="Filter trips by status"
-      class="w-full sm:w-auto text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-emerald-500 bg-white text-gray-600"
-    >
-      <option value="">All Statuses</option>
-      <option value="scheduled">Scheduled</option>
-      <option value="ongoing">Ongoing</option>
-      <option value="completed">Completed</option>
-      <option value="cancelled">Cancelled</option>
-    </select>
-    <span class="text-xs text-gray-400 sm:ml-auto">
-      {{ filteredTrips().length }} trip{{ filteredTrips().length !== 1 ? 's' : '' }}
-    </span>
   </div>
 
   @if (filteredTrips().length === 0) {
     <div class="bg-white rounded-2xl p-10 text-center shadow-sm border border-gray-100">
       <i class="pi pi-folder-open text-4xl text-gray-300 mb-3 block"></i>
       <h3 class="text-base font-bold text-gray-800 mb-1">
-        {{ activeTab() === 'archive' ? 'No Archived Trips' : 'No Scheduled Trips' }}
+        {{
+          activeTab() === 'today'
+            ? 'No Trips Today'
+            : activeTab() === 'archive'
+              ? 'No Archived Trips'
+              : 'No Trips This Month'
+        }}
       </h3>
       <p class="text-gray-400 text-sm">
-        {{ search() || statusFilter() ? 'No trips match your filters.' : activeTab() === 'archive'
-          ? 'Completed or cancelled trips from previous dates will appear here.'
-          : 'You have no current or upcoming trips assigned.' }}
+        {{
+          search() || statusFilter()
+            ? 'No trips match your filters.'
+            : activeTab() === 'today'
+              ? 'You have no trips scheduled for today.'
+              : activeTab() === 'archive'
+                ? 'Completed or cancelled trips from previous dates will appear here.'
+                : 'You have no trips this month. Check with the Administrator for dispatch schedules.'
+        }}
       </p>
     </div>
   } @else {
   @if (viewMode() === 'card') {
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      @for (trip of visibleTrips(); track trip.id) {
+      @for (trip of displayedTrips(); track trip.id) {
       <div class="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden flex flex-col hover:shadow-lg transition-shadow duration-200">
         <!-- Card Header -->
         <div class="px-5 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
@@ -232,15 +277,20 @@
       }
     </div>
 
-    @if (hasMore()) {
-      <div class="flex justify-center mt-6">
-        <button
-          type="button"
-          (click)="showMore()"
-          class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
-        >
-          Show older trips
-        </button>
+    @if (totalPages() > 1) {
+      <div class="mt-4 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <app-table-pagination
+          [currentPage]="currentPage()"
+          [totalPages]="totalPages()"
+          [totalItems]="totalItems()"
+          [pageSize]="pageSize()"
+          [pageStart]="pageStart()"
+          [pageEnd]="pageEnd()"
+          [pageNumbers]="pageNumbers()"
+          [pageSizes]="PAGE_SIZES"
+          (pageChange)="setPage($event)"
+          (pageSizeChange)="onPageSizeChange($event)"
+        />
       </div>
     }
   } @else {
@@ -259,7 +309,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            @for (trip of visibleTrips(); track trip.id) {
+            @for (trip of displayedTrips(); track trip.id) {
               <tr class="hover:bg-gray-50">
                 <td class="px-5 py-3 font-semibold text-gray-800">#{{ trip.trip_number }}</td>
                 <td class="px-5 py-3 text-gray-700">
@@ -300,17 +350,20 @@
       </div>
     </div>
 
-    @if (hasMore()) {
-      <div class="flex justify-center mt-6">
-        <button
-          type="button"
-          (click)="showMore()"
-          class="px-5 py-2.5 rounded-lg text-sm font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
-        >
-          Show older trips
-        </button>
-      </div>
-    }
+    <div class="mt-4 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <app-table-pagination
+          [currentPage]="currentPage()"
+          [totalPages]="totalPages()"
+          [totalItems]="totalItems()"
+          [pageSize]="pageSize()"
+          [pageStart]="pageStart()"
+          [pageEnd]="pageEnd()"
+          [pageNumbers]="pageNumbers()"
+          [pageSizes]="PAGE_SIZES"
+          (pageChange)="setPage($event)"
+          (pageSizeChange)="onPageSizeChange($event)"
+        />
+    </div>
     }
   }
 }

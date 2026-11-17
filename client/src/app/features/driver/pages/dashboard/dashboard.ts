@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
 import { AlertService } from '../../../../core/services/alert.service';
 import { environment } from '../../../../../environments/environment';
+import { TablePagination } from '../../../../shared/components/table-pagination/table-pagination';
 
 export interface Trip {
   id: number;
@@ -31,7 +32,7 @@ export interface Trip {
 }
 
 type ViewMode = 'card' | 'table';
-type ScheduleTab = 'schedule' | 'archive';
+type ScheduleTab = 'today' | 'all' | 'archive';
 
 function manilaDateStr(date: Date): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -46,7 +47,7 @@ function manilaDateStr(date: Date): string {
 
 @Component({
   selector: 'app-driver-dashboard',
-  imports: [DatePipe],
+  imports: [DatePipe, TablePagination],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
 })
@@ -55,15 +56,33 @@ export class DriverDashboard implements OnInit {
   private alertService = inject(AlertService);
 
   private readonly API = `${environment.apiUrl}/api/driver`;
-  private readonly PAGE = 12;
 
   trips = signal<Trip[]>([]);
   loading = signal(false);
   viewMode = signal<ViewMode>('card');
-  activeTab = signal<ScheduleTab>('schedule');
+  activeTab = signal<ScheduleTab>('today');
   search = signal('');
   statusFilter = signal('');
+  pageSize = signal(9);
+  currentPage = signal(1);
+  readonly PAGE_SIZES = [6, 9, 18, 36];
   private readonly todayStr = manilaDateStr(new Date());
+  // Current month as YYYY-MM (Manila) — the "All" tab shows every trip in this month.
+  private readonly monthStr = this.todayStr.slice(0, 7);
+
+  /** Today's trips: the active one first, then by departure time. */
+  todayTrips = computed(() =>
+    this.trips()
+      .filter(
+        (trip) =>
+          !!trip.departure_time && manilaDateStr(new Date(trip.departure_time)) === this.todayStr,
+      )
+      .sort(
+        (a, b) =>
+          Number(b.status === 'ongoing') - Number(a.status === 'ongoing') ||
+          new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime(),
+      ),
+  );
 
   isArchivedTrip(trip: Trip): boolean {
     return (
@@ -83,10 +102,14 @@ export class DriverDashboard implements OnInit {
       ),
   );
 
-  /** Active and current-date trips stay in the main schedule; older finished trips are archived. */
-  sortedTrips = computed(() =>
+  /** Every trip of the current month, whatever its status. Active trip first, then newest. */
+  allTrips = computed(() =>
     this.trips()
-      .filter((trip) => !this.isArchivedTrip(trip))
+      .filter(
+        (trip) =>
+          !!trip.departure_time &&
+          manilaDateStr(new Date(trip.departure_time)).slice(0, 7) === this.monthStr,
+      )
       .sort(
         (a, b) =>
           Number(b.status === 'ongoing') - Number(a.status === 'ongoing') ||
@@ -95,11 +118,19 @@ export class DriverDashboard implements OnInit {
       ),
   );
 
+  /** Tab-scoped list before search/filter. */
+  private tabTrips = computed(() =>
+    this.activeTab() === 'today'
+      ? this.todayTrips()
+      : this.activeTab() === 'archive'
+        ? this.archivedTrips()
+        : this.allTrips(),
+  );
+
   filteredTrips = computed(() => {
     const query = this.search().trim().toLowerCase();
     const status = this.statusFilter();
-    const trips = this.activeTab() === 'archive' ? this.archivedTrips() : this.sortedTrips();
-    return trips.filter((trip) => {
+    return this.tabTrips().filter((trip) => {
       const matchesSearch =
         !query ||
         String(trip.trip_number).includes(query) ||
@@ -114,28 +145,56 @@ export class DriverDashboard implements OnInit {
     });
   });
 
-  /** Only the newest trips are drawn; "Show more" reveals older ones. */
-  visibleCount = signal(this.PAGE);
-  visibleTrips = computed(() => this.filteredTrips().slice(0, this.visibleCount()));
-  hasMore = computed(() => this.filteredTrips().length > this.visibleCount());
+  // Counts for badge indicators
+  ongoingCount = computed(() => this.trips().filter((t) => t.status === 'ongoing').length);
+  scheduledTodayCount = computed(
+    () => this.todayTrips().filter((t) => t.status === 'scheduled').length,
+  );
+
+  // Pagination
+  totalItems = computed(() => this.filteredTrips().length);
+  totalPages = computed(() => Math.max(1, Math.ceil(this.totalItems() / this.pageSize())));
+  pageStart = computed(() => (this.currentPage() - 1) * this.pageSize() + 1);
+  pageEnd = computed(() => Math.min(this.currentPage() * this.pageSize(), this.totalItems()));
+
+  displayedTrips = computed(() => {
+    const start = (this.currentPage() - 1) * this.pageSize();
+    return this.filteredTrips().slice(start, start + this.pageSize());
+  });
+
+  pageNumbers = computed(() => {
+    const total = this.totalPages(),
+      cur = this.currentPage();
+    const pages: (number | '...')[] = [];
+    for (let i = 1; i <= total; i++) {
+      if (i === 1 || i === total || Math.abs(i - cur) <= 1) pages.push(i);
+      else if (pages[pages.length - 1] !== '...') pages.push('...');
+    }
+    return pages;
+  });
 
   setTab(tab: ScheduleTab): void {
     this.activeTab.set(tab);
-    this.visibleCount.set(this.PAGE);
+    this.currentPage.set(1);
+  }
+
+  setPage(page: number): void {
+    this.currentPage.set(page);
+  }
+
+  onPageSizeChange(size: number): void {
+    this.pageSize.set(size);
+    this.currentPage.set(1);
   }
 
   onSearch(event: Event): void {
     this.search.set((event.target as HTMLInputElement).value);
-    this.visibleCount.set(this.PAGE);
+    this.currentPage.set(1);
   }
 
   onStatusFilter(event: Event): void {
     this.statusFilter.set((event.target as HTMLSelectElement).value);
-    this.visibleCount.set(this.PAGE);
-  }
-
-  showMore(): void {
-    this.visibleCount.update((n) => n + this.PAGE);
+    this.currentPage.set(1);
   }
 
   ngOnInit(): void {
@@ -147,7 +206,7 @@ export class DriverDashboard implements OnInit {
     this.http.get<Trip[]>(`${this.API}/trips`, { withCredentials: true }).subscribe({
       next: (data) => {
         this.trips.set(data);
-        this.visibleCount.set(this.PAGE);
+        this.currentPage.set(1);
         this.loading.set(false);
       },
       error: () => {

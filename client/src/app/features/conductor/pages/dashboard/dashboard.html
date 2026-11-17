@@ -73,20 +73,6 @@
         >{{ allTrips().length }}</span
       >
     </button>
-    <button
-      (click)="activeTab.set('archive')"
-      class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
-      [class.bg-white]="activeTab() === 'archive'"
-      [class.shadow-sm]="activeTab() === 'archive'"
-      [class.text-gray-800]="activeTab() === 'archive'"
-      [class.text-gray-500]="activeTab() !== 'archive'"
-    >
-      <i class="pi pi-folder text-xs"></i>
-      Archive
-      <span class="bg-gray-300 text-gray-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-        {{ archivedTrips().length }}
-      </span>
-    </button>
   </div>
 
   <!-- Search -->
@@ -114,9 +100,23 @@
     <option value="cancelled">Cancelled</option>
   </select>
 
-  <span class="text-xs text-gray-400 hidden sm:block ml-auto">
-    {{ totalItems() }} trip{{ totalItems() !== 1 ? 's' : '' }}
-  </span>
+  <!-- Archive — sits after the status filter -->
+  <div class="flex gap-1 bg-gray-100 rounded-xl p-1">
+    <button
+      (click)="activeTab.set('archive')"
+      class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+      [class.bg-white]="activeTab() === 'archive'"
+      [class.shadow-sm]="activeTab() === 'archive'"
+      [class.text-gray-800]="activeTab() === 'archive'"
+      [class.text-gray-500]="activeTab() !== 'archive'"
+    >
+      <i class="pi pi-folder text-xs"></i>
+      Archive
+      <span class="bg-gray-300 text-gray-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+        {{ archivedTrips().length }}
+      </span>
+    </button>
+  </div>
 </div>
 
 @if (loading()) {
@@ -133,7 +133,7 @@
           ? 'No Trips Today'
           : activeTab() === 'archive'
             ? 'No Archived Trips'
-            : 'No Assigned Trips'
+            : 'No Trips This Month'
       }}
     </h3>
     <p class="text-gray-400 text-sm">
@@ -144,7 +144,7 @@
             ? 'You have no trips scheduled for today.'
             : activeTab() === 'archive'
               ? 'Completed or cancelled trips from previous dates will appear here.'
-              : 'Contact the Administrator for trip assignment.'
+              : 'You have no trips this month. Contact the Administrator for trip assignment.'
       }}
     </p>
   </div>
