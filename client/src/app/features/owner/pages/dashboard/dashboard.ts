@@ -123,9 +123,39 @@ export class Dashboard implements OnInit {
     this.loadDashboard();
   }
 
+  /**
+   * Date range to request for the selected preset. It is built here from the preset
+   * itself (local calendar dates), so the request always matches the highlighted button.
+   */
+  private currentRange(): { from: string; to: string } | null {
+    const today = new Date();
+    const to = this.localKey(today);
+    const daysBack = (n: number) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - n);
+      return this.localKey(d);
+    };
+    switch (this.rangePreset()) {
+      case 'today':
+        return { from: to, to };
+      case '7d':
+        return { from: daysBack(6), to };
+      case '30d':
+        return { from: daysBack(29), to };
+      case 'month':
+        return { from: this.localKey(new Date(today.getFullYear(), today.getMonth(), 1)), to };
+      case 'custom':
+        return this.customFrom() && this.customTo()
+          ? { from: this.customFrom(), to: this.customTo() }
+          : null;
+      default:
+        return null;
+    }
+  }
+
   loadDashboard(): void {
     this.loading.set(true);
-    const range = this.rangeState.dashboardQuery();
+    const range = this.currentRange();
     let params = new HttpParams();
     if (range) {
       params = params.set('from', range.from).set('to', range.to);
