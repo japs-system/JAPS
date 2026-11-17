@@ -85,11 +85,11 @@ export class ConductorDashboard implements OnInit {
       ),
   );
 
+  /** Archive = every trip from before the current month (any status), so it never overlaps "All". */
   isArchivedTrip(trip: Trip): boolean {
     return (
-      (trip.status === 'completed' || trip.status === 'cancelled') &&
       !!trip.departure_time &&
-      manilaDateStr(new Date(trip.departure_time)) < this.todayStr
+      manilaDateStr(new Date(trip.departure_time)).slice(0, 7) < this.monthStr
     );
   }
 
