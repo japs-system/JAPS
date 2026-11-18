@@ -4,8 +4,8 @@
     <h2 class="text-xl font-semibold text-gray-800">My Trips</h2>
   </div>
 
-  <!-- View toggle — hidden on mobile (card view only on small screens) -->
-  <div class="hidden sm:flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+  <!-- View toggle — visible on all screen sizes -->
+  <div class="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
     <button
       (click)="viewMode.set('card')"
       class="p-1.5 rounded-md transition-all cursor-pointer"
@@ -34,7 +34,7 @@
 <!-- Tabs + search row — stacks on mobile -->
 <div class="flex flex-wrap items-center gap-3 mb-4">
   <!-- Tabs -->
-  <div class="flex gap-1 bg-gray-100 rounded-xl p-1">
+  <div class="order-1 flex gap-1 bg-gray-100 rounded-xl p-1">
     <button
       (click)="activeTab.set('today')"
       class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
@@ -76,7 +76,7 @@
   </div>
 
   <!-- Search -->
-  <div class="relative flex-1 min-w-[260px]">
+  <div class="relative order-3 w-full sm:order-2 sm:w-auto sm:flex-1 sm:min-w-[260px]">
     <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
     <input
       type="text"
@@ -91,7 +91,7 @@
   <select
     (change)="onStatusFilter($event)"
     [value]="statusFilter()"
-    class="w-full sm:w-auto text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white text-gray-600"
+    class="order-4 sm:order-3 w-full sm:w-auto text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-[#1E5AAA] focus:ring-2 focus:ring-[#1E5AAA]/20 bg-white text-gray-600"
   >
     <option value="">All Statuses</option>
     <option value="scheduled">Scheduled</option>
@@ -100,8 +100,8 @@
     <option value="cancelled">Cancelled</option>
   </select>
 
-  <!-- Archive — sits after the status filter -->
-  <div class="flex gap-1 bg-gray-100 rounded-xl p-1">
+  <!-- Archive — beside the tabs on mobile, after the status filter on desktop -->
+  <div class="order-2 ml-auto sm:order-4 sm:ml-0 flex gap-1 sm:bg-gray-100 rounded-xl sm:p-1">
     <button
       (click)="activeTab.set('archive')"
       class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
